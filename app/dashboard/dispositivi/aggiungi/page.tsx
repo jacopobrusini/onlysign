@@ -9,8 +9,8 @@ export default function AggiungiDispositivoPage() {
     >
       <Header />
 
-      <section className="flex min-h-screen items-center justify-center px-6 pt-16">
-        <div className="w-full max-w-md">
+      <section className="mx-auto min-h-screen max-w-3xl px-6 pb-24 pt-32 sm:pb-16">
+       <div className="mx-auto w-full max-w-md">
           {/* Titolo */}
           <div className="mb-8 text-center">
             <h1 className="text-4xl font-bold tracking-tight">
