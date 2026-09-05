@@ -5,13 +5,24 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  // Override default ignores of eslint-config-next.
+
+  {
+    settings: {
+      react: {
+        version: "19",
+      },
+    },
+  },
+
   globalIgnores([
-    // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
+
+    // File generati automaticamente da Prisma
+    "prisma/contract.d.ts",
+    "migrations/snapshots/**/contract.d.ts",
   ]),
 ]);
 

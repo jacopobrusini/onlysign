@@ -1,10 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import Header from "@/components/Header";
 
 export default function RegistrationPage() {
+  const router = useRouter();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -67,19 +69,46 @@ export default function RegistrationPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  event.preventDefault();
 
-    if (!validate()) {
+  if (!validate()) {
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        username,
+        email,
+        password,
+        confirmPassword,
+        acceptedTerms,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      setErrors((current) => ({
+        ...current,
+        [data.field || "email"]: data.error,
+      }));
+
       return;
     }
+    router.push(
+  `/verifica-email?email=${encodeURIComponent(email)}`
+);
 
-    console.log("Registrazione valida", {
-      username,
-      email,
-      password,
-    });
-  };
+  } catch (error) {
+    console.error("Errore di connessione:", error);
+  }
+};
 
   const handlePasswordChange = (value: string) => {
     setPassword(value);
