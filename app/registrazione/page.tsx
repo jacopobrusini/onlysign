@@ -7,11 +7,14 @@ import Header from "@/components/Header";
 
 export default function RegistrationPage() {
   const router = useRouter();
+
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+
+  const [loading, setLoading] = useState(false);
 
   const [errors, setErrors] = useState<{
     username?: string;
@@ -38,25 +41,30 @@ export default function RegistrationPage() {
     if (!username.trim()) {
       newErrors.username = "Inserisci un username.";
     } else if (username.trim().length < 3) {
-      newErrors.username = "L'username deve avere almeno 3 caratteri.";
+      newErrors.username =
+        "L'username deve avere almeno 3 caratteri.";
     }
 
     if (!email.trim()) {
       newErrors.email = "Inserisci la tua email.";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      newErrors.email = "Inserisci un indirizzo email valido.";
+      newErrors.email =
+        "Inserisci un indirizzo email valido.";
     }
 
     if (!password) {
       newErrors.password = "Inserisci una password.";
     } else if (!passwordValid) {
-      newErrors.password = "La password non soddisfa tutti i requisiti.";
+      newErrors.password =
+        "La password non soddisfa tutti i requisiti.";
     }
 
     if (!confirmPassword) {
-      newErrors.confirmPassword = "Conferma la password.";
+      newErrors.confirmPassword =
+        "Conferma la password.";
     } else if (password !== confirmPassword) {
-      newErrors.confirmPassword = "Le password non coincidono.";
+      newErrors.confirmPassword =
+        "Le password non coincidono.";
     }
 
     if (!acceptedTerms) {
@@ -69,46 +77,58 @@ export default function RegistrationPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-  event.preventDefault();
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
 
-  if (!validate()) {
-    return;
-  }
-
-  try {
-    const response = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        username,
-        email,
-        password,
-        confirmPassword,
-        acceptedTerms,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      setErrors((current) => ({
-        ...current,
-        [data.field || "email"]: data.error,
-      }));
-
+    if (!validate()) {
       return;
     }
-    router.push(
-  `/verifica-email?email=${encodeURIComponent(email)}`
-);
 
-  } catch (error) {
-    console.error("Errore di connessione:", error);
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username,
+          email,
+          password,
+          confirmPassword,
+          acceptedTerms,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setErrors((current) => ({
+          ...current,
+          [data.field || "email"]: data.error,
+        }));
+
+        return;
+      }
+
+      router.push(
+        `/verifica-email?email=${encodeURIComponent(email)}`
+      );
+    } catch (error) {
+      console.error("Errore di connessione:", error);
+
+      setErrors((current) => ({
+        ...current,
+        email:
+          "Si è verificato un errore di connessione. Riprova.",
+      }));
+    } finally {
+      setLoading(false);
+    }
   }
-};
 
   const handlePasswordChange = (value: string) => {
     setPassword(value);
@@ -173,9 +193,9 @@ export default function RegistrationPage() {
           {/* Pannello */}
           <div className="rounded-3xl border border-white/20 bg-white/10 p-8 shadow-2xl backdrop-blur-2xl">
             <form
+              className="space-y-5"
               onSubmit={handleSubmit}
               noValidate
-              className="space-y-5"
             >
 
               {/* Username */}
@@ -193,6 +213,7 @@ export default function RegistrationPage() {
                   value={username}
                   onChange={(event) => {
                     setUsername(event.target.value);
+
                     setErrors((current) => ({
                       ...current,
                       username: undefined,
@@ -229,6 +250,7 @@ export default function RegistrationPage() {
                   value={email}
                   onChange={(event) => {
                     setEmail(event.target.value);
+
                     setErrors((current) => ({
                       ...current,
                       email: undefined,
@@ -264,7 +286,9 @@ export default function RegistrationPage() {
                   type="password"
                   value={password}
                   onChange={(event) =>
-                    handlePasswordChange(event.target.value)
+                    handlePasswordChange(
+                      event.target.value
+                    )
                   }
                   placeholder="Scegli una password"
                   autoComplete="new-password"
@@ -284,7 +308,8 @@ export default function RegistrationPage() {
                         : "text-zinc-500"
                     }
                   >
-                    {passwordRules.length ? "✓" : "○"} Almeno 8 caratteri
+                    {passwordRules.length ? "✓" : "○"}{" "}
+                    Almeno 8 caratteri
                   </p>
 
                   <p
@@ -294,7 +319,8 @@ export default function RegistrationPage() {
                         : "text-zinc-500"
                     }
                   >
-                    {passwordRules.uppercase ? "✓" : "○"} Una lettera maiuscola
+                    {passwordRules.uppercase ? "✓" : "○"}{" "}
+                    Una lettera maiuscola
                   </p>
 
                   <p
@@ -304,7 +330,8 @@ export default function RegistrationPage() {
                         : "text-zinc-500"
                     }
                   >
-                    {passwordRules.number ? "✓" : "○"} Un numero
+                    {passwordRules.number ? "✓" : "○"}{" "}
+                    Un numero
                   </p>
                 </div>
 
@@ -329,7 +356,9 @@ export default function RegistrationPage() {
                   type="password"
                   value={confirmPassword}
                   onChange={(event) =>
-                    handleConfirmPasswordChange(event.target.value)
+                    handleConfirmPasswordChange(
+                      event.target.value
+                    )
                   }
                   placeholder="Ripeti la password"
                   autoComplete="new-password"
@@ -361,7 +390,9 @@ export default function RegistrationPage() {
                     type="checkbox"
                     checked={acceptedTerms}
                     onChange={(event) => {
-                      setAcceptedTerms(event.target.checked);
+                      setAcceptedTerms(
+                        event.target.checked
+                      );
 
                       if (event.target.checked) {
                         setErrors((current) => ({
@@ -402,9 +433,12 @@ export default function RegistrationPage() {
               {/* Registrazione */}
               <button
                 type="submit"
-                className="w-full rounded-xl bg-white py-3 font-medium text-black transition hover:bg-zinc-200"
+                disabled={loading}
+                className="w-full rounded-xl bg-white py-3 font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Crea account
+                {loading
+                  ? "Creazione account in corso..."
+                  : "Crea account"}
               </button>
             </form>
 

@@ -1,3 +1,4 @@
+import { createSession } from "@/lib/session";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { db } from "@/prisma/db";
@@ -32,7 +33,12 @@ export async function GET(request: Request) {
       );
     }
 
-    if (Temporal.Now.instant() > verificationToken.expiresAt) {
+    if (
+  Temporal.Instant.compare(
+    Temporal.Now.instant(),
+    verificationToken.expiresAt
+  ) > 0
+) {
       await db.orm.public.EmailVerificationToken
         .where({ id: verificationToken.id })
         .delete();
@@ -44,19 +50,21 @@ export async function GET(request: Request) {
     }
 
     await db.orm.public.User
-      .where({ id: verificationToken.userId })
-      .update({
-        emailVerified: true,
-      });
+  .where({ id: verificationToken.userId })
+  .update({
+    emailVerified: true,
+  });
 
-    await db.orm.public.EmailVerificationToken
-      .where({ id: verificationToken.id })
-      .delete();
+await db.orm.public.EmailVerificationToken
+  .where({ id: verificationToken.id })
+  .delete();
 
-    return NextResponse.json({
-      success: true,
-      message: "Email verificata con successo.",
-    });
+await createSession(verificationToken.userId);
+
+return NextResponse.json({
+  success: true,
+  message: "Email verificata con successo.",
+});
   } catch (error) {
     console.error("Email verification error:", error);
 

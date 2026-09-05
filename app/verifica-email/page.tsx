@@ -1,25 +1,38 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
 
-type Status = "loading" | "success" | "error";
+type Status = "checking" | "pending" | "loading" | "success" | "error";
 
 export default function VerificaEmailPage() {
-  const [status, setStatus] = useState<Status>("loading");
+  const router = useRouter();
+
+  const [status, setStatus] = useState<Status>("checking");
   const [message, setMessage] = useState("");
+  const [email, setEmail] = useState("");
 
   useEffect(() => {
     const verifyEmail = async () => {
       const params = new URLSearchParams(window.location.search);
       const token = params.get("token");
+      const emailParam = params.get("email");
 
       if (!token) {
+        if (emailParam) {
+          setEmail(emailParam);
+          setStatus("pending");
+          return;
+        }
+
         setStatus("error");
-        setMessage("Token di verifica mancante.");
+        setMessage("Informazioni di verifica mancanti.");
         return;
       }
+
+      setStatus("loading");
 
       try {
         const response = await fetch(
@@ -38,6 +51,10 @@ export default function VerificaEmailPage() {
 
         setStatus("success");
         setMessage(data.message || "Email verificata con successo.");
+
+        setTimeout(() => {
+          router.replace("/dashboard");
+        }, 1200);
       } catch {
         setStatus("error");
         setMessage(
@@ -47,7 +64,7 @@ export default function VerificaEmailPage() {
     };
 
     verifyEmail();
-  }, []);
+  }, [router]);
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -55,6 +72,64 @@ export default function VerificaEmailPage() {
 
       <div className="flex min-h-screen items-center justify-center px-6 pt-16">
         <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 text-center shadow-2xl backdrop-blur-xl">
+          {status === "checking" && (
+            <>
+              <div className="mx-auto mb-6 h-12 w-12 animate-spin rounded-full border-2 border-white/10 border-t-white" />
+
+              <h1 className="text-2xl font-semibold">
+                Caricamento
+              </h1>
+
+              <p className="mt-3 text-sm leading-6 text-white/50">
+                Stiamo preparando la verifica del tuo account...
+              </p>
+            </>
+          )}
+
+          {status === "pending" && (
+            <>
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white/10 text-2xl">
+                ✉
+              </div>
+
+              <h1 className="mt-6 text-2xl font-semibold">
+                Controlla la tua email
+              </h1>
+
+              <p className="mt-3 text-sm leading-6 text-white/50">
+                Ti abbiamo inviato un&apos;email con il link per verificare
+                il tuo account.
+              </p>
+
+              {email && (
+                <p className="mt-4 break-all text-sm font-medium text-white/80">
+                  {email}
+                </p>
+              )}
+
+              <p className="mt-4 text-sm leading-6 text-white/40">
+                Controlla la tua casella di posta e clicca sul link
+                nell&apos;email per completare la verifica.
+              </p>
+
+              <div className="mt-8 flex flex-col gap-3">
+                <Link
+                  href="/login"
+                  className="inline-flex w-full items-center justify-center rounded-2xl bg-white px-5 py-3 font-medium text-black transition hover:bg-zinc-200"
+                >
+                  Vai al login
+                </Link>
+
+                <Link
+                  href="/"
+                  className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 py-3 font-medium text-white transition hover:bg-white/10"
+                >
+                  Torna alla Home
+                </Link>
+              </div>
+            </>
+          )}
+
           {status === "loading" && (
             <>
               <div className="mx-auto mb-6 h-12 w-12 animate-spin rounded-full border-2 border-white/10 border-t-white" />
@@ -83,12 +158,9 @@ export default function VerificaEmailPage() {
                 {message}
               </p>
 
-              <Link
-                href="/login"
-                className="mt-8 inline-flex w-full items-center justify-center rounded-2xl bg-white px-5 py-3 font-medium text-black transition hover:bg-zinc-200"
-              >
-                Vai al login
-              </Link>
+              <p className="mt-4 text-sm text-white/30">
+                Ti stiamo reindirizzando alla dashboard...
+              </p>
             </>
           )}
 
