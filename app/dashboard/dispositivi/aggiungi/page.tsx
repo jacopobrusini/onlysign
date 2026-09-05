@@ -4,9 +4,9 @@ import Header from "@/components/Header";
 export default function AggiungiDispositivoPage() {
   return (
     <main
-      className="min-h-screen bg-cover bg-center bg-fixed text-white"
-      style={{ backgroundImage: "url('/background.png')" }}
-    >
+  className="min-h-screen bg-cover bg-center bg-fixed bg-no-repeat text-white"
+  style={{ backgroundImage: "url('/background.png')" }}
+>
       <Header />
 
       <section className="mx-auto min-h-screen max-w-3xl px-6 pb-24 pt-32 sm:pb-16">

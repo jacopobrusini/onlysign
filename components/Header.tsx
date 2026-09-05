@@ -10,7 +10,7 @@ export default function Header() {
 
   return (
     <>
-      <header className="fixed left-0 right-0 top-0 z-60 flex h-16 items-center justify-between border-b border-white/15 bg-white/5 px-5 backdrop-blur-xl">
+      <header className="fixed left-0 right-0 top-0 z-60 flex h-16 items-center justify-between border-b border-white/15 bg-white/5 px-3 md:px-5 backdrop-blur-xl">
         {/* Menu */}
         <button
           type="button"
