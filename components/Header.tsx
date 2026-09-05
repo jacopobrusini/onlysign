@@ -15,7 +15,7 @@ export default function Header() {
         <button
           type="button"
           onClick={() => setMenuOpen(!menuOpen)}
-          className="relative z-60 flex h-12 w-12 items-center justify-center text-3xl text-white transition hover:text-zinc-400"
+          className="relative z-[60] -ml-2 flex h-12 w-12 items-center justify-center text-3xl text-white transition hover:text-zinc-400"
           aria-label={menuOpen ? "Chiudi menu" : "Apri menu"}
         >
           ☰
