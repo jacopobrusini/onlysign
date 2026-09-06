@@ -1,7 +1,11 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import { getSession } from "@/lib/session";
 
-export default function Dashboard() {
+export default async function Dashboard() {
+  const session = await getSession();
+  const username = session?.user.username ?? "utente";
+
   return (
     <main
       className="min-h-screen bg-cover bg-center bg-fixed text-white"
@@ -19,7 +23,7 @@ export default function Dashboard() {
             </p>
 
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-              Bentornato, Jacopo
+              Bentornato, {username}
             </h1>
 
             <p className="mt-3 text-white/60">

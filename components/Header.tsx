@@ -78,17 +78,17 @@ export default function Header() {
         <div className="ml-auto flex items-center">
           {!loading && user ? (
             <Link
-              href="/dashboard/profilo"
-              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-right transition hover:bg-white/10"
-            >
-              <p className="text-sm font-medium text-white">
-                {user.username}
-              </p>
+  href="/dashboard"
+  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-right transition hover:bg-white/10"
+>
+  <p className="text-sm font-medium text-white">
+    {user.username}
+  </p>
 
-              <p className="mt-0.5 text-[11px] text-white/40">
-                Profilo
-              </p>
-            </Link>
+  <p className="mt-0.5 text-[11px] text-white/40">
+    Account
+  </p>
+</Link>
           ) : !loading ? (
             <div className="flex items-center gap-2">
               <Link

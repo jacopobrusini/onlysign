@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 
 type User = {
@@ -25,17 +25,18 @@ export default function Sidebar({
   loading,
 }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
 
   const isActive = (path: string) => pathname === path;
 
-    async function handleLogout() {
+  async function handleLogout() {
     try {
       await fetch("/api/auth/logout", {
         method: "POST",
       });
     } finally {
       onClose();
-      window.location.href = "/";
+      router.push("/");
     }
   }
 
@@ -207,12 +208,12 @@ export default function Sidebar({
         {user && (
           <div className="border-t border-white/10 pt-4">
             <button
-  type="button"
-  onClick={handleLogout}
-  className="w-full rounded-xl px-4 py-3 text-left text-red-300 transition hover:bg-red-500/10"
->
-  Logout
-</button>
+              type="button"
+              onClick={handleLogout}
+              className="w-full rounded-xl px-4 py-3 text-left text-red-300 transition hover:bg-red-500/10"
+            >
+              Logout
+            </button>
           </div>
         )}
       </aside>
