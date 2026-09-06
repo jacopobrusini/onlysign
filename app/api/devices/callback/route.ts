@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import forge from "node-forge";
+import { createHash, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { parseProfileServiceResponse } from "@udid-tools/core";
@@ -7,34 +8,308 @@ import { db } from "@/prisma/db";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
+/*
+ * ============================================================
+ * Crea il configuration profile che verrà restituito
+ * all'iPhone dopo la registrazione.
+ * ============================================================
+ */
+function createConfigurationProfile() {
+  const payloadUUID = randomUUID().toUpperCase();
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+    <key>PayloadContent</key>
+    <array>
+    </array>
+
+    <key>PayloadDisplayName</key>
+    <string>onlySign</string>
+
+    <key>PayloadDescription</key>
+    <string>Registrazione dispositivo onlySign completata.</string>
+
+    <key>PayloadIdentifier</key>
+    <string>it.onlysign.device-registration</string>
+
+    <key>PayloadOrganization</key>
+    <string>onlySign</string>
+
+    <key>PayloadType</key>
+    <string>Configuration</string>
+
+    <key>PayloadUUID</key>
+    <string>${payloadUUID}</string>
+
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+
+</dict>
+</plist>`;
+}
+
+/*
+ * ============================================================
+ * Firma il configuration profile con il certificato contenuto
+ * nel PKCS#12.
+ *
+ * Le credenziali vengono lette esclusivamente dalle variabili
+ * d'ambiente server-side.
+ * ============================================================
+ */
+async function signConfigurationProfile(
+  configuration: string
+): Promise<Uint8Array> {
+  const p12Base64 =
+    process.env.ONLYSIGN_PROFILE_P12_BASE64;
+
+  const p12Password =
+    process.env.ONLYSIGN_PROFILE_P12_PASSWORD;
+
+  if (!p12Base64) {
+    throw new Error(
+      "ONLYSIGN_PROFILE_P12_BASE64 non configurata."
+    );
+  }
+
+  if (p12Password === undefined) {
+    throw new Error(
+      "ONLYSIGN_PROFILE_P12_PASSWORD non configurata."
+    );
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * Base64 → DER
+   * ----------------------------------------------------------
+   */
+  const p12Der =
+    forge.util.decode64(p12Base64);
+
+  /*
+   * ----------------------------------------------------------
+   * DER → ASN.1
+   * ----------------------------------------------------------
+   */
+  const asn1 =
+    forge.asn1.fromDer(p12Der);
+
+  /*
+   * ----------------------------------------------------------
+   * ASN.1 → PKCS#12
+   * ----------------------------------------------------------
+   */
+  const p12 =
+    forge.pkcs12.pkcs12FromAsn1(
+      asn1,
+      false,
+      p12Password
+    );
+
+  /*
+   * ----------------------------------------------------------
+   * Recuperiamo la chiave privata.
+   * ----------------------------------------------------------
+   */
+  const keyBags =
+    p12.getBags({
+      bagType:
+        forge.pki.oids.pkcs8ShroudedKeyBag,
+    })[
+      forge.pki.oids.pkcs8ShroudedKeyBag
+    ] ?? [];
+
+  /*
+   * ----------------------------------------------------------
+   * Recuperiamo i certificati.
+   * ----------------------------------------------------------
+   */
+  const certBags =
+    p12.getBags({
+      bagType:
+        forge.pki.oids.certBag,
+    })[
+      forge.pki.oids.certBag
+    ] ?? [];
+
+  const keyBag = keyBags[0];
+  const certBag = certBags[0];
+
+  if (!keyBag?.key) {
+    throw new Error(
+      "Chiave privata non trovata nel PKCS#12."
+    );
+  }
+
+  if (!certBag?.cert) {
+    throw new Error(
+      "Certificato non trovato nel PKCS#12."
+    );
+  }
+
+  const privateKey = keyBag.key;
+  const certificate = certBag.cert;
+
+  /*
+   * ----------------------------------------------------------
+   * Prepariamo il contenuto da firmare.
+   * ----------------------------------------------------------
+   */
+  const content =
+    forge.util.createBuffer(
+      configuration,
+      "utf8"
+    );
+
+  /*
+   * ----------------------------------------------------------
+   * Creiamo CMS / PKCS#7 SignedData.
+   * ----------------------------------------------------------
+   */
+  const signedData =
+    forge.pkcs7.createSignedData();
+
+  signedData.content = content;
+
+  /*
+   * Inseriamo il certificato del signer.
+   */
+  signedData.addCertificate(
+    certificate
+  );
+
+  /*
+   * ----------------------------------------------------------
+   * Configuriamo la firma RSA + SHA-256.
+   * ----------------------------------------------------------
+   */
+  signedData.addSigner({
+    certificate,
+    key: privateKey,
+
+    digestAlgorithm:
+      forge.pki.oids.sha256,
+
+    authenticatedAttributes: [
+      {
+        type:
+          forge.pki.oids.contentType,
+
+        value:
+          forge.pki.oids.data,
+      },
+
+      {
+        type:
+          forge.pki.oids.messageDigest,
+      },
+
+      {
+        type:
+          forge.pki.oids.signingTime,
+      },
+    ],
+  });
+
+  /*
+   * ----------------------------------------------------------
+   * Firma CMS attached.
+   * ----------------------------------------------------------
+   */
+  signedData.sign({
+    detached: false,
+  });
+
+  /*
+   * ----------------------------------------------------------
+   * CMS ASN.1 → DER.
+   * ----------------------------------------------------------
+   */
+  const der =
+    forge.asn1
+      .toDer(
+        signedData.toAsn1()
+      )
+      .getBytes();
+
+  /*
+   * Buffer Node → Uint8Array.
+   *
+   * Uint8Array evita il problema TypeScript:
+   * Buffer<ArrayBufferLike> non assignable to BodyInit.
+   */
+  const result = new Uint8Array(
+  der.length
+);
+
+for (let i = 0; i < der.length; i++) {
+  result[i] = der.charCodeAt(i) & 0xff;
+}
+
+return result;
+}
+
+/*
+ * ============================================================
+ * PROFILE SERVICE CALLBACK
+ * ============================================================
+ */
+export async function POST(
+  request: Request
+) {
   try {
-    const body = await request.arrayBuffer();
+    /*
+     * ----------------------------------------------------------
+     * Riceviamo la risposta PKCS#7 dell'iPhone.
+     * ----------------------------------------------------------
+     */
+    const body =
+      await request.arrayBuffer();
 
     if (body.byteLength === 0) {
-      return new NextResponse("Invalid request.", {
-        status: 400,
-      });
+      return new NextResponse(
+        "Invalid request.",
+        {
+          status: 400,
+        }
+      );
     }
 
     /*
-     * Apple invia una risposta CMS/PKCS#7.
+     * ========================================================
+     * iPhone → server
      *
-     * @udid-tools/core:
-     * - decodifica il CMS
-     * - verifica la firma
-     * - estrae il plist
-     * - estrae gli attributi del dispositivo
-     * - estrae il CHALLENGE
+     * Il dispositivo invia un CMS / PKCS#7 contenente:
+     *
+     * UDID
+     * DEVICE_NAME
+     * VERSION
+     * PRODUCT
+     * CHALLENGE
+     * ========================================================
      */
-    const result = await parseProfileServiceResponse(body, {
-      requiredAttributes: ["UDID"],
+    const result =
+      await parseProfileServiceResponse(
+        body,
+        {
+          requiredAttributes: [
+            "UDID",
+          ],
 
-      verification: {
-        mode: "signature",
-      },
-    });
+          verification: {
+            mode: "signature",
+          },
+        }
+      );
 
+    /*
+     * ----------------------------------------------------------
+     * Il PKCS#7 non è valido.
+     * ----------------------------------------------------------
+     */
     if (!result.ok) {
       console.error(
         "Device response rejected:",
@@ -49,108 +324,38 @@ export async function POST(request: Request) {
       );
     }
 
-    const response = result.value;
+    const response =
+      result.value;
 
-    console.log("=== DEVICE RESPONSE ===");
-    console.log("Attributes:", response.attributes);
-    console.log("Challenge:", response.challenge);
-    console.log("Signature:", response.signature);
+    console.log(
+      "=== DEVICE RESPONSE ==="
+    );
 
-    /*
-     * UDID
-     */
-    const udid = response.attributes.udid?.trim();
+    console.log(
+      "Attributes:",
+      response.attributes
+    );
 
-    if (!udid) {
-      return new NextResponse(
-        "Missing device UDID.",
-        {
-          status: 400,
-        }
-      );
-    }
+    console.log(
+      "Challenge:",
+      response.challenge
+    );
 
-    /*
-     * CHALLENGE
-     *
-     * Il challenge può essere una stringa oppure Uint8Array.
-     */
-    let challenge: string;
-
-    if (typeof response.challenge === "string") {
-      challenge = response.challenge;
-    } else if (response.challenge instanceof Uint8Array) {
-      challenge = new TextDecoder().decode(
-        response.challenge
-      );
-    } else {
-      return new NextResponse(
-        "Missing challenge.",
-        {
-          status: 400,
-        }
-      );
-    }
-
-    challenge = challenge.trim();
-
-    if (!challenge) {
-      return new NextResponse(
-        "Missing challenge.",
-        {
-          status: 400,
-        }
-      );
-    }
+    console.log(
+      "Signature:",
+      response.signature
+    );
 
     /*
-     * Il challenge viene cercato tramite SHA-256.
-     */
-    const tokenHash = createHash("sha256")
-      .update(challenge)
-      .digest("hex");
-
-    const registration =
-      await db.orm.public.DeviceRegistration
-        .where({ tokenHash })
-        .first();
-
-    if (!registration) {
-      return new NextResponse(
-        "Invalid or expired registration.",
-        {
-          status: 403,
-        }
-      );
-    }
-
-    /*
-     * Verifica scadenza.
+     * ========================================================
+     * Verifica firma del dispositivo
+     * ========================================================
      */
     if (
-      Temporal.Instant.compare(
-        Temporal.Now.instant(),
-        registration.expiresAt
-      ) > 0
-    ) {
-      await db.orm.public.DeviceRegistration
-        .where({ id: registration.id })
-        .delete();
-
-      return new NextResponse(
-        "Registration expired.",
-        {
-          status: 410,
-        }
-      );
-    }
-
-    /*
-     * Verifica che la firma CMS sia presente e valida.
-     */
-    if (
-      response.signature.present !== true ||
-      response.signature.valid !== true
+      response.signature.present !==
+        true ||
+      response.signature.valid !==
+        true
     ) {
       console.error(
         "Invalid device signature:",
@@ -166,29 +371,147 @@ export async function POST(request: Request) {
     }
 
     /*
-     * DEVICE_NAME non fa parte degli attributi normalizzati
-     * dalla libreria, quindi lo leggiamo dal plist originale.
+     * ========================================================
+     * UDID
+     * ========================================================
      */
-    const rawDeviceName = response.raw[
-      "DEVICE_NAME"
-    ];
+    const udid =
+      response.attributes.udid?.trim();
+
+    if (!udid) {
+      return new NextResponse(
+        "Missing device UDID.",
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+     * ========================================================
+     * CHALLENGE
+     * ========================================================
+     */
+    let challenge: string;
+
+    if (
+      typeof response.challenge ===
+      "string"
+    ) {
+      challenge =
+        response.challenge;
+    } else if (
+      response.challenge instanceof
+      Uint8Array
+    ) {
+      challenge =
+        new TextDecoder().decode(
+          response.challenge
+        );
+    } else {
+      return new NextResponse(
+        "Missing challenge.",
+        {
+          status: 400,
+        }
+      );
+    }
+
+    challenge =
+      challenge.trim();
+
+    if (!challenge) {
+      return new NextResponse(
+        "Missing challenge.",
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+     * ========================================================
+     * Recuperiamo la registrazione temporanea.
+     * ========================================================
+     */
+    const tokenHash =
+      createHash("sha256")
+        .update(challenge)
+        .digest("hex");
+
+    const registration =
+      await db.orm.public.DeviceRegistration
+        .where({
+          tokenHash,
+        })
+        .first();
+
+    if (!registration) {
+      return new NextResponse(
+        "Invalid or expired registration.",
+        {
+          status: 403,
+        }
+      );
+    }
+
+    /*
+     * ========================================================
+     * Controllo scadenza.
+     * ========================================================
+     */
+    if (
+      Temporal.Instant.compare(
+        Temporal.Now.instant(),
+        registration.expiresAt
+      ) > 0
+    ) {
+      await db.orm.public.DeviceRegistration
+        .where({
+          id: registration.id,
+        })
+        .delete();
+
+      return new NextResponse(
+        "Registration expired.",
+        {
+          status: 410,
+        }
+      );
+    }
+
+    /*
+     * ========================================================
+     * Nome dispositivo.
+     * ========================================================
+     */
+    const rawDeviceName =
+      response.raw["DEVICE_NAME"];
 
     const deviceName =
-      typeof rawDeviceName === "string"
-        ? rawDeviceName.trim() || null
+      typeof rawDeviceName ===
+      "string"
+        ? rawDeviceName.trim() ||
+          null
         : null;
 
     /*
+     * ========================================================
      * Controlliamo se l'UDID è già registrato.
+     * ========================================================
      */
     const existingDevice =
       await db.orm.public.Device
-        .where({ udid })
+        .where({
+          udid,
+        })
         .first();
 
     if (existingDevice) {
       await db.orm.public.DeviceRegistration
-        .where({ id: registration.id })
+        .where({
+          id: registration.id,
+        })
         .delete();
 
       return new NextResponse(
@@ -200,31 +523,30 @@ export async function POST(request: Request) {
     }
 
     /*
-     * Registriamo il dispositivo.
+     * ========================================================
+     * Salviamo il dispositivo.
+     * ========================================================
      */
     await db.orm.public.Device.create({
-      userId: registration.userId,
+      userId:
+        registration.userId,
 
       udid,
 
       name: deviceName,
 
       model:
-        response.attributes.product?.trim() || null,
+        response.attributes.product?.trim() ||
+        null,
 
       product:
-        response.attributes.product?.trim() || null,
+        response.attributes.product?.trim() ||
+        null,
 
       osVersion:
-        response.attributes.version?.trim() || null,
+        response.attributes.version?.trim() ||
+        null,
     });
-
-    /*
-     * Il challenge è monouso.
-     */
-    await db.orm.public.DeviceRegistration
-      .where({ id: registration.id })
-      .delete();
 
     console.log(
       "Device registered successfully:",
@@ -232,80 +554,65 @@ export async function POST(request: Request) {
     );
 
     /*
-     * Risposta finale mostrata da iOS/Safari.
+     * ========================================================
+     * Creiamo il configuration profile.
+     * ========================================================
      */
-    return new NextResponse(
-      `<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-    <title>onlySign - Dispositivo registrato</title>
-</head>
+    const configuration =
+      createConfigurationProfile();
 
-<body style="
-    margin: 0;
-    padding: 40px 20px;
-    background: #050505;
-    color: white;
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    text-align: center;
-">
+    /*
+     * ========================================================
+     * Firmiamo il configuration profile.
+     * ========================================================
+     */
+    const signedConfiguration =
+      await signConfigurationProfile(
+        configuration
+      );
 
-    <div style="
-        max-width: 500px;
-        margin: 80px auto;
-        padding: 40px 25px;
-        border: 1px solid rgba(255,255,255,.1);
-        border-radius: 24px;
-        background: rgba(255,255,255,.05);
-    ">
+    /*
+     * ========================================================
+     * Registrazione completata.
+     *
+     * Il challenge è one-time, quindi possiamo eliminarlo.
+     * ========================================================
+     */
+    await db.orm.public.DeviceRegistration
+      .where({
+        id: registration.id,
+      })
+      .delete();
 
-        <h1 style="
-            margin-bottom: 12px;
-        ">
-            Dispositivo registrato
-        </h1>
+    /*
+     * ========================================================
+     * Restituiamo a iOS il CMS / PKCS#7.
+     * ========================================================
+     */
+    const responseBuffer = new ArrayBuffer(
+  signedConfiguration.byteLength
+);
 
-        <p style="
-            color: rgba(255,255,255,.6);
-            line-height: 1.6;
-        ">
-            Il tuo dispositivo è stato registrato
-            correttamente su onlySign.
-        </p>
+new Uint8Array(responseBuffer).set(
+  signedConfiguration
+);
 
-        <a
-            href="/dashboard/dispositivi"
-            style="
-                display: inline-block;
-                margin-top: 25px;
-                padding: 12px 20px;
-                border-radius: 12px;
-                background: white;
-                color: black;
-                text-decoration: none;
-                font-weight: 600;
-            "
-        >
-            Vai ai dispositivi
-        </a>
+return new NextResponse(
+  responseBuffer,
+  {
+    status: 200,
+    headers: {
+      "Content-Type":
+        "application/x-apple-aspen-config",
 
-    </div>
+      "Content-Length":
+        signedConfiguration.byteLength.toString(),
 
-</body>
-</html>`,
-      {
-        status: 200,
-        headers: {
-          "Content-Type": "text/html; charset=utf-8",
-          "Cache-Control": "no-store",
-        },
-      }
-    );
+      "Cache-Control":
+        "no-store",
+    },
+  }
+);
   } catch (error) {
     console.error(
       "Device callback error:",
