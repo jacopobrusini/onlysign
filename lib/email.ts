@@ -12,7 +12,10 @@ export async function sendVerificationEmail({
   token: string;
 }) {
   const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  process.env.NEXT_PUBLIC_APP_URL ??
+  (process.env.NODE_ENV === "production"
+    ? "https://onlysign.vercel.app"
+    : "http://localhost:3000");
 
   const verificationUrl =
     `${appUrl}/verifica-email?token=${encodeURIComponent(token)}`;

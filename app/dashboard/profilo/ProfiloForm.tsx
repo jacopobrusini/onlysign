@@ -165,48 +165,14 @@ export default function ProfiloForm({
     <>
       {/* Informazioni account */}
       <div className="rounded-2xl border border-white/10 bg-black/20 p-6 shadow-xl backdrop-blur-xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">
-              Informazioni account
-            </h2>
+        <div>
+          <h2 className="text-xl font-semibold">
+            Informazioni account
+          </h2>
 
-            <p className="mt-1 text-sm text-white/40">
-              Le informazioni associate al tuo account.
-            </p>
-          </div>
-
-          {!editing ? (
-            <button
-              type="button"
-              onClick={handleEdit}
-              className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
-            >
-              Modifica
-            </button>
-          ) : (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleCancel}
-                disabled={saving}
-                className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Annulla
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving}
-                className="rounded-xl bg-white px-5 py-2.5 text-sm font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {saving
-                  ? "Salvataggio..."
-                  : "Salva modifiche"}
-              </button>
-            </div>
-          )}
+          <p className="mt-1 text-sm text-white/40">
+            Le informazioni associate al tuo account.
+          </p>
         </div>
 
         <div className="mt-6 grid gap-5 sm:grid-cols-2">
@@ -293,6 +259,41 @@ export default function ProfiloForm({
             {error}
           </p>
         )}
+
+        {/* Pulsanti modifica */}
+        <div className="mt-6 flex justify-end gap-2">
+          {!editing ? (
+            <button
+              type="button"
+              onClick={handleEdit}
+              className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
+            >
+              Modifica
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={saving}
+                className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Annulla
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="rounded-xl bg-white px-5 py-2.5 text-sm font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving
+                  ? "Salvataggio..."
+                  : "Salva modifiche"}
+              </button>
+            </>
+          )}
+        </div>
 
         {editing && (
           <p className="mt-4 text-xs text-white/40">
