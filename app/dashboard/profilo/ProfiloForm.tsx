@@ -371,25 +371,23 @@ export default function ProfiloForm({
         </div>
       </div>
 
-      {/* Eliminazione account */}
-      <div className="mt-6 rounded-2xl border border-red-400/20 bg-red-500/5 p-6 shadow-xl backdrop-blur-xl">
-        <h2 className="text-xl font-semibold text-red-200">
-          Zona pericolosa
-        </h2>
+      <div className="mt-12 rounded-2xl border border-red-500/20 bg-red-500/5 p-6">
+  <h2 className="text-lg font-semibold text-white">
+    Elimina account
+  </h2>
 
-        <p className="mt-2 max-w-2xl text-sm text-white/50">
-          L&apos;eliminazione dell&apos;account rimuoverà
-          definitivamente i dati associati al tuo profilo.
-          Questa operazione non può essere annullata.
-        </p>
+  <p className="mt-2 text-sm leading-6 text-white/50">
+    L&apos;eliminazione dell&apos;account è permanente e non può essere annullata.
+    Per procedere dovrai confermare l&apos;operazione tramite e-mail.
+  </p>
 
-        <button
-          type="button"
-          className="mt-5 rounded-xl border border-red-400/20 bg-red-500/10 px-6 py-3 font-medium text-red-200 transition hover:bg-red-500/20"
-        >
-          Elimina account
-        </button>
-      </div>
+  <Link
+  href="/dashboard/profilo/elimina"
+  className="mt-5 inline-block rounded-xl border border-red-500/30 bg-red-500/10 px-6 py-3 font-medium text-red-300 transition hover:bg-red-500/20"
+>
+  Elimina account
+</Link>
+</div>
     </>
   );
 }

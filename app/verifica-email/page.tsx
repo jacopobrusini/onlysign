@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
@@ -14,7 +14,15 @@ export default function VerificaEmailPage() {
   const [message, setMessage] = useState("");
   const [email, setEmail] = useState("");
 
+  const verificationStarted = useRef(false);
+
   useEffect(() => {
+    if (verificationStarted.current) {
+      return;
+    }
+
+    verificationStarted.current = true;
+
     const verifyEmail = async () => {
       const params = new URLSearchParams(window.location.search);
       const token = params.get("token");

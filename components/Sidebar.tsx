@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
+import { useState } from "react";
 
 type User = {
   id: number;
@@ -27,9 +28,15 @@ export default function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
 
+  const [loggingOut, setLoggingOut] = useState(false);
+
   const isActive = (path: string) => pathname === path;
 
   async function handleLogout() {
+    if (loggingOut) return;
+
+    setLoggingOut(true);
+
     try {
       await fetch("/api/auth/logout", {
         method: "POST",
@@ -210,9 +217,10 @@ export default function Sidebar({
             <button
               type="button"
               onClick={handleLogout}
-              className="w-full rounded-xl px-4 py-3 text-left text-red-300 transition hover:bg-red-500/10"
+              disabled={loggingOut}
+              className="w-full rounded-xl px-4 py-3 text-left text-red-300 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Logout
+              {loggingOut ? "Logout in corso..." : "Logout"}
             </button>
           </div>
         )}

@@ -157,3 +157,136 @@ export async function sendVerificationEmail({
 
   return data;
 }
+
+export async function sendPasswordChangeEmail({
+  email,
+  username,
+  token,
+}: {
+  email: string;
+  username: string;
+  token: string;
+}) {
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    (process.env.NODE_ENV === "production"
+      ? "https://onlysign.vercel.app"
+      : "http://localhost:3000");
+
+  const verificationUrl =
+    `${appUrl}/dashboard/profilo/password/conferma?token=${encodeURIComponent(token)}`;
+
+  const from =
+    process.env.RESEND_FROM_EMAIL ||
+    "onlySign <onboarding@resend.dev>";
+
+  const { data, error } = await resend.emails.send({
+    from,
+    to: [email],
+    subject: "Conferma modifica password - onlySign",
+    html: `
+      <div style="background:#09090b;padding:40px 20px;font-family:Arial,sans-serif;color:#fff;">
+        <div style="max-width:520px;margin:auto;background:#18181b;border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:32px;">
+          <h1 style="margin:0 0 12px;font-size:28px;">
+            only<span style="color:#a1a1aa;">Sign</span>
+          </h1>
+
+          <p style="color:#d4d4d8;">
+            Ciao ${username},
+          </p>
+
+          <p style="color:#a1a1aa;line-height:1.6;">
+            Hai richiesto di modificare la password del tuo account onlySign.
+            Per confermare l'operazione clicca sul pulsante qui sotto.
+          </p>
+
+          <a
+            href="${verificationUrl}"
+            style="display:inline-block;margin-top:20px;padding:14px 22px;background:#fff;color:#000;text-decoration:none;border-radius:12px;font-weight:600;"
+          >
+            Conferma modifica password
+          </a>
+
+          <p style="margin-top:24px;color:#71717a;font-size:13px;line-height:1.5;">
+            Il link è valido per 24 ore. Se non hai richiesto questa modifica,
+            puoi ignorare questa email.
+          </p>
+        </div>
+      </div>
+    `,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+export async function sendAccountDeletionEmail({
+  email,
+  username,
+  token,
+}: {
+  email: string;
+  username: string;
+  token: string;
+}) {
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    (process.env.NODE_ENV === "production"
+      ? "https://onlysign.vercel.app"
+      : "http://localhost:3000");
+
+  const deletionUrl =
+    `${appUrl}/dashboard/profilo/elimina/conferma?token=${encodeURIComponent(token)}`;
+
+  const from =
+    process.env.RESEND_FROM_EMAIL ||
+    "onlySign <onboarding@resend.dev>";
+
+  const { data, error } = await resend.emails.send({
+    from,
+    to: [email],
+    subject: "Conferma eliminazione account - onlySign",
+    html: `
+      <div style="background:#09090b;padding:40px 20px;font-family:Arial,sans-serif;color:#fff;">
+        <div style="max-width:520px;margin:auto;background:#18181b;border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:32px;">
+
+          <h1 style="margin:0 0 12px;font-size:28px;">
+            only<span style="color:#a1a1aa;">Sign</span>
+          </h1>
+
+          <p style="color:#d4d4d8;">
+            Ciao ${username},
+          </p>
+
+          <p style="color:#a1a1aa;line-height:1.6;">
+            Hai richiesto l'eliminazione del tuo account onlySign.
+            Se vuoi procedere, conferma l'operazione cliccando sul pulsante qui sotto.
+          </p>
+
+          <a
+            href="${deletionUrl}"
+            style="display:inline-block;margin-top:20px;padding:14px 22px;background:#ef4444;color:#fff;text-decoration:none;border-radius:12px;font-weight:600;"
+          >
+            Elimina definitivamente l'account
+          </a>
+
+          <p style="margin-top:24px;color:#71717a;font-size:13px;line-height:1.5;">
+            Il link è valido per 24 ore.
+            Se non hai richiesto l'eliminazione del tuo account,
+            puoi ignorare questa email.
+          </p>
+
+        </div>
+      </div>
+    `,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
