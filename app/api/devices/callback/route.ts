@@ -1,63 +1,110 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import { parse } from "plist";
+
+import { parseProfileServiceResponse } from "@udid-tools/core";
 
 import { db } from "@/prisma/db";
 
 export const runtime = "nodejs";
 
-type DeviceResponse = {
-  UDID?: string;
-  DEVICE_NAME?: string;
-  VERSION?: string;
-  PRODUCT?: string;
-  CHALLENGE?: string;
-};
-
 export async function POST(request: Request) {
   try {
-    const body = await request.text();
-    console.log("=== DEVICE CALLBACK ===");
-console.log("Content-Type:", request.headers.get("content-type"));
-console.log("Body:", body);
+    const body = await request.arrayBuffer();
 
-    if (!body) {
+    if (body.byteLength === 0) {
       return new NextResponse("Invalid request.", {
         status: 400,
       });
     }
 
-    let deviceData: DeviceResponse;
+    /*
+     * Apple invia una risposta CMS/PKCS#7.
+     *
+     * @udid-tools/core:
+     * - decodifica il CMS
+     * - verifica la firma
+     * - estrae il plist
+     * - estrae gli attributi del dispositivo
+     * - estrae il CHALLENGE
+     */
+    const result = await parseProfileServiceResponse(body, {
+      requiredAttributes: ["UDID"],
 
-    try {
-      deviceData = parse(body) as DeviceResponse;
-    } catch (error) {
-      console.error("Invalid plist:", error);
+      verification: {
+        mode: "signature",
+      },
+    });
 
-      return new NextResponse("Invalid plist.", {
-        status: 400,
-      });
+    if (!result.ok) {
+      console.error(
+        "Device response rejected:",
+        result.error
+      );
+
+      return new NextResponse(
+        "Invalid device response.",
+        {
+          status: 400,
+        }
+      );
     }
 
-    const challenge = deviceData.CHALLENGE?.trim();
-    const udid = deviceData.UDID?.trim();
+    const response = result.value;
 
-    if (!challenge) {
-      return new NextResponse("Missing challenge.", {
-        status: 400,
-      });
-    }
+    console.log("=== DEVICE RESPONSE ===");
+    console.log("Attributes:", response.attributes);
+    console.log("Challenge:", response.challenge);
+    console.log("Signature:", response.signature);
+
+    /*
+     * UDID
+     */
+    const udid = response.attributes.udid?.trim();
 
     if (!udid) {
-      return new NextResponse("Missing UDID.", {
-        status: 400,
-      });
+      return new NextResponse(
+        "Missing device UDID.",
+        {
+          status: 400,
+        }
+      );
     }
 
     /*
-     * Il challenge ricevuto dall'iPhone viene hashato
-     * nello stesso modo utilizzato durante la creazione
-     * del profilo.
+     * CHALLENGE
+     *
+     * Il challenge può essere una stringa oppure Uint8Array.
+     */
+    let challenge: string;
+
+    if (typeof response.challenge === "string") {
+      challenge = response.challenge;
+    } else if (response.challenge instanceof Uint8Array) {
+      challenge = new TextDecoder().decode(
+        response.challenge
+      );
+    } else {
+      return new NextResponse(
+        "Missing challenge.",
+        {
+          status: 400,
+        }
+      );
+    }
+
+    challenge = challenge.trim();
+
+    if (!challenge) {
+      return new NextResponse(
+        "Missing challenge.",
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+     * Il challenge viene cercato tramite SHA-256.
      */
     const tokenHash = createHash("sha256")
       .update(challenge)
@@ -78,7 +125,7 @@ console.log("Body:", body);
     }
 
     /*
-     * Controlliamo la scadenza.
+     * Verifica scadenza.
      */
     if (
       Temporal.Instant.compare(
@@ -99,7 +146,40 @@ console.log("Body:", body);
     }
 
     /*
-     * Evitiamo di registrare due volte lo stesso UDID.
+     * Verifica che la firma CMS sia presente e valida.
+     */
+    if (
+      response.signature.present !== true ||
+      response.signature.valid !== true
+    ) {
+      console.error(
+        "Invalid device signature:",
+        response.signature
+      );
+
+      return new NextResponse(
+        "Invalid device signature.",
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+     * DEVICE_NAME non fa parte degli attributi normalizzati
+     * dalla libreria, quindi lo leggiamo dal plist originale.
+     */
+    const rawDeviceName = response.raw[
+      "DEVICE_NAME"
+    ];
+
+    const deviceName =
+      typeof rawDeviceName === "string"
+        ? rawDeviceName.trim() || null
+        : null;
+
+    /*
+     * Controlliamo se l'UDID è già registrato.
      */
     const existingDevice =
       await db.orm.public.Device
@@ -107,7 +187,6 @@ console.log("Body:", body);
         .first();
 
     if (existingDevice) {
-      // Il challenge è monouso anche in questo caso.
       await db.orm.public.DeviceRegistration
         .where({ id: registration.id })
         .delete();
@@ -121,34 +200,52 @@ console.log("Body:", body);
     }
 
     /*
-     * Creiamo il dispositivo associandolo
-     * all'utente che ha generato il challenge.
+     * Registriamo il dispositivo.
      */
     await db.orm.public.Device.create({
       userId: registration.userId,
+
       udid,
-      name: deviceData.DEVICE_NAME?.trim() || null,
-      model: deviceData.PRODUCT?.trim() || null,
-      product: deviceData.PRODUCT?.trim() || null,
-      osVersion: deviceData.VERSION?.trim() || null,
+
+      name: deviceName,
+
+      model:
+        response.attributes.product?.trim() || null,
+
+      product:
+        response.attributes.product?.trim() || null,
+
+      osVersion:
+        response.attributes.version?.trim() || null,
     });
 
     /*
-     * Challenge monouso:
-     * dopo una registrazione riuscita non può più essere riutilizzato.
+     * Il challenge è monouso.
      */
     await db.orm.public.DeviceRegistration
       .where({ id: registration.id })
       .delete();
 
+    console.log(
+      "Device registered successfully:",
+      udid
+    );
+
+    /*
+     * Risposta finale mostrata da iOS/Safari.
+     */
     return new NextResponse(
       `<!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
     <title>onlySign - Dispositivo registrato</title>
 </head>
+
 <body style="
     margin: 0;
     padding: 40px 20px;
@@ -157,6 +254,7 @@ console.log("Body:", body);
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     text-align: center;
 ">
+
     <div style="
         max-width: 500px;
         margin: 80px auto;
@@ -165,11 +263,17 @@ console.log("Body:", body);
         border-radius: 24px;
         background: rgba(255,255,255,.05);
     ">
-        <h1 style="margin-bottom: 12px;">
+
+        <h1 style="
+            margin-bottom: 12px;
+        ">
             Dispositivo registrato
         </h1>
 
-        <p style="color: rgba(255,255,255,.6);">
+        <p style="
+            color: rgba(255,255,255,.6);
+            line-height: 1.6;
+        ">
             Il tuo dispositivo è stato registrato
             correttamente su onlySign.
         </p>
@@ -189,7 +293,9 @@ console.log("Body:", body);
         >
             Vai ai dispositivi
         </a>
+
     </div>
+
 </body>
 </html>`,
       {
@@ -201,7 +307,10 @@ console.log("Body:", body);
       }
     );
   } catch (error) {
-    console.error("Device callback error:", error);
+    console.error(
+      "Device callback error:",
+      error
+    );
 
     return new NextResponse(
       "An error occurred while registering the device.",

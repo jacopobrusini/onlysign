@@ -15,6 +15,7 @@
     "@js-temporal/polyfill": "^0.5.1",
     "@prisma/client": "^7.10.0",
     "@prisma/orm-postgres": "8.0.0-rc.8",
+    "@udid-tools/core": "0.1.0-beta.2",
     "argon2": "^0.45.1",
     "dotenv": "^17.4.2",
     "next": "16.3.4",
