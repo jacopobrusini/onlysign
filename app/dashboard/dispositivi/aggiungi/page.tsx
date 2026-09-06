@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import Header from "@/components/Header";
 
@@ -41,12 +43,12 @@ export default function AggiungiDispositivoPage() {
             </p>
 
             {/* Installa profilo */}
-            <button
-              type="button"
-              className="mt-7 w-full rounded-xl bg-white py-3 font-medium text-black transition hover:bg-zinc-200"
-            >
-              Installa profilo
-            </button>
+            <a
+  href="/api/devices/register"
+  className="mt-7 block w-full rounded-xl bg-white py-3 font-medium text-black transition hover:bg-zinc-200"
+>
+  Installa profilo
+</a>
 
             {/* Torna indietro */}
             <div className="mt-6 border-t border-white/10 pt-6">

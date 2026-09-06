@@ -61,7 +61,7 @@ export default function Sidebar({
 
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 top-0 z-50 flex h-full w-80 flex-col border-r border-white/10 bg-black/40 p-5 shadow-2xl backdrop-blur-2xl transition-transform duration-300 ${
+        className={`fixed left-0 top-0 z-70 flex h-full w-80 flex-col border-r border-white/10 bg-black/70 p-5 shadow-2xl backdrop-blur-2xl transition-transform duration-300 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -112,7 +112,7 @@ export default function Sidebar({
             </p>
 
             <p className="mt-1 text-xs text-white/40">
-              Account
+              Dashboard
             </p>
           </Link>
         ) : !loading ? (
@@ -142,7 +142,7 @@ export default function Sidebar({
         ) : null}
 
         {/* Navigation */}
-        <nav className="mt-4 flex-1 space-y-1.5 overflow-y-auto">
+        <nav className="mt-8 flex-1 space-y-1.5 overflow-y-auto">
           {/* Account */}
           {user && (
             <>

@@ -1,12 +1,15 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent } from "react";
 import Header from "@/components/Header";
 
 export default function RegistrationPage() {
   const router = useRouter();
+
+  const [checkingSession, setCheckingSession] = useState(true);
 
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -23,6 +26,29 @@ export default function RegistrationPage() {
     confirmPassword?: string;
     terms?: string;
   }>({});
+
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        const response = await fetch("/api/auth/me");
+
+        if (response.ok) {
+          const data = await response.json();
+
+          if (data.user) {
+            router.replace("/dashboard");
+            return;
+          }
+        }
+      } catch {
+        // Nessuna sessione: la registrazione può continuare.
+      }
+
+      setCheckingSession(false);
+    }
+
+    checkSession();
+  }, [router]);
 
   const passwordRules = {
     length: password.length >= 8,
@@ -168,6 +194,21 @@ export default function RegistrationPage() {
           : "Le password non coincidono.",
     }));
   };
+
+  if (checkingSession) {
+    return (
+      <main
+        className="min-h-screen bg-cover bg-center bg-fixed text-white"
+        style={{ backgroundImage: "url('/background.png')" }}
+      >
+        <Header />
+
+        <section className="flex min-h-screen items-center justify-center px-6">
+          <div className="h-12 w-12 animate-pulse rounded-2xl border border-white/10 bg-white/5" />
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main
@@ -407,14 +448,14 @@ export default function RegistrationPage() {
                   <span className="text-xs leading-5 text-zinc-400">
                     Accetto i{" "}
                     <Link
-                      href="/dashboard/info"
+                      href="/info"
                       className="text-white transition hover:text-zinc-300"
                     >
                       Termini e Condizioni
                     </Link>{" "}
                     e la{" "}
                     <Link
-                      href="/dashboard/info"
+                      href="/info"
                       className="text-white transition hover:text-zinc-300"
                     >
                       Privacy Policy

@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 
 export default function LoginPage() {
   const router = useRouter();
+
+  const [checkingSession, setCheckingSession] = useState(true);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -14,7 +16,32 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        const response = await fetch("/api/auth/me");
+
+        if (response.ok) {
+          const data = await response.json();
+
+          if (data.user) {
+            router.replace("/dashboard");
+            return;
+          }
+        }
+      } catch {
+        // Nessuna sessione: il login può continuare.
+      }
+
+      setCheckingSession(false);
+    }
+
+    checkSession();
+  }, [router]);
+
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
     setError("");
@@ -62,6 +89,21 @@ export default function LoginPage() {
     }
   }
 
+  if (checkingSession) {
+    return (
+      <main
+        className="min-h-screen bg-cover bg-center bg-fixed text-white"
+        style={{ backgroundImage: "url('/background.png')" }}
+      >
+        <Header />
+
+        <section className="flex min-h-screen items-center justify-center px-6">
+          <div className="h-12 w-12 animate-pulse rounded-2xl border border-white/10 bg-white/5" />
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main
       className="min-h-screen bg-cover bg-center bg-fixed text-white"
@@ -74,8 +116,9 @@ export default function LoginPage() {
           {/* Titolo */}
           <div className="mb-8 text-center">
             <h1 className="text-4xl font-bold tracking-tight">
-              Accedi a <span className="text-white">only</span>
-            <span className="text-zinc-400">Sign</span>
+              Accedi a{" "}
+              <span className="text-white">only</span>
+              <span className="text-zinc-400">Sign</span>
             </h1>
 
             <p className="mt-3 text-zinc-400">

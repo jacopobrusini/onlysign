@@ -1,12 +1,48 @@
+"use client";
+
 import Link from "next/link";
 import Header from "@/components/Header";
+import { useEffect, useState } from "react";
+
+type User = {
+  id: number;
+  username: string;
+  email: string;
+  emailVerified: boolean;
+};
 
 export default function Home() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadUser() {
+      try {
+        const response = await fetch("/api/auth/me");
+
+        if (!response.ok) {
+          setUser(null);
+          return;
+        }
+
+        const data = await response.json();
+
+        setUser(data.user ?? null);
+      } catch {
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadUser();
+  }, []);
+
   return (
     <main
-  className="min-h-screen bg-cover bg-center bg-fixed text-white"
-  style={{ backgroundImage: "url('/background.png')" }}
->
+      className="min-h-screen bg-cover bg-center bg-fixed text-white"
+      style={{ backgroundImage: "url('/background.png')" }}
+    >
       <Header />
 
       <section className="flex min-h-screen items-center justify-center px-6 pb-12 pt-24 sm:pb-16 sm:pt-24">
@@ -29,12 +65,23 @@ export default function Home() {
           </p>
 
           <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
-            <Link
-              href="/registrazione"
-              className="rounded-xl bg-white px-7 py-3 font-medium text-black transition hover:bg-zinc-200"
-            >
-              Crea account
-            </Link>
+            {!loading && user ? (
+              <Link
+                href="/dashboard"
+                className="rounded-xl bg-white px-7 py-3 font-medium text-black transition hover:bg-zinc-200"
+              >
+                Dashboard
+              </Link>
+            ) : !loading ? (
+              <Link
+                href="/registrazione"
+                className="rounded-xl bg-white px-7 py-3 font-medium text-black transition hover:bg-zinc-200"
+              >
+                Crea account
+              </Link>
+            ) : (
+              <div className="h-[46px] w-[140px] rounded-xl bg-white/10" />
+            )}
 
             <Link
               href="/prezzi"
