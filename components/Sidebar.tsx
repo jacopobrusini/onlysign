@@ -141,75 +141,102 @@ export default function Sidebar({
           </div>
         ) : null}
 
-        {/* Account menu */}
-        {user && (
-          <nav className="mt-4 flex-1 space-y-1.5 overflow-y-auto">
-            {/* Profilo */}
-            <Link
-              href="/dashboard/profilo"
-              onClick={onClose}
-              className={`ml-4 block rounded-xl px-4 py-3 text-white transition hover:bg-white/10 ${
-                isActive("/dashboard/profilo")
-                  ? "bg-white/10 shadow-md backdrop-blur-md"
-                  : "bg-white/5 shadow-sm"
-              }`}
-            >
-              Profilo
-            </Link>
+        {/* Navigation */}
+        <nav className="mt-4 flex-1 space-y-1.5 overflow-y-auto">
+          {/* Account */}
+          {user && (
+            <>
+              <p className="px-4 pb-2 pt-2 text-xs uppercase tracking-[0.2em] text-white/30">
+                Account
+              </p>
 
-            {/* Dispositivi */}
-            <Link
-              href="/dashboard/dispositivi"
-              onClick={onClose}
-              className={`ml-4 block rounded-xl px-4 py-3 text-white transition hover:bg-white/10 ${
-                isActive("/dashboard/dispositivi")
-                  ? "bg-white/10 shadow-md backdrop-blur-md"
-                  : "bg-white/5 shadow-sm"
-              }`}
-            >
-              Dispositivi
-            </Link>
+              {/* Profilo */}
+              <Link
+                href="/dashboard/profilo"
+                onClick={onClose}
+                className={`ml-4 block rounded-xl px-4 py-3 text-white transition hover:bg-white/10 ${
+                  isActive("/dashboard/profilo")
+                    ? "bg-white/10 shadow-md backdrop-blur-md"
+                    : "bg-white/5 shadow-sm"
+                }`}
+              >
+                Profilo
+              </Link>
 
-            {/* Prezzi */}
-            <Link
-              href="/prezzi"
-              onClick={onClose}
-              className={`mt-3 block rounded-xl px-4 py-3 text-white transition hover:bg-white/10 ${
-                isActive("/prezzi")
-                  ? "bg-white/15 shadow-lg backdrop-blur-md"
-                  : ""
-              }`}
-            >
-              Prezzi
-            </Link>
+              {/* Dispositivi */}
+              <Link
+                href="/dashboard/dispositivi"
+                onClick={onClose}
+                className={`ml-4 block rounded-xl px-4 py-3 text-white transition hover:bg-white/10 ${
+                  isActive("/dashboard/dispositivi")
+                    ? "bg-white/10 shadow-md backdrop-blur-md"
+                    : "bg-white/5 shadow-sm"
+                }`}
+              >
+                Dispositivi
+              </Link>
 
-            {/* FAQ */}
-            <Link
-              href="/faq"
-              onClick={onClose}
-              className={`block rounded-xl px-4 py-3 text-white transition hover:bg-white/10 ${
-                isActive("/faq")
-                  ? "bg-white/15 shadow-lg backdrop-blur-md"
-                  : ""
-              }`}
-            >
-              FAQ
-            </Link>
+              <div className="my-4 border-t border-white/10" />
+            </>
+          )}
 
-            {/* Info / Legale */}
-            <Link
-              href="/dashboard/info"
-              onClick={onClose}
-              className={`block rounded-xl px-4 py-3 text-white transition hover:bg-white/10 ${
-                isActive("/dashboard/info")
-                  ? "bg-white/15 shadow-lg backdrop-blur-md"
-                  : ""
-              }`}
-            >
-              Info / Legale
-            </Link>
-          </nav>
-        )}
+          {/* Pubblico */}
+          <p className="px-4 pb-2 pt-2 text-xs uppercase tracking-[0.2em] text-white/30">
+            Pubblico
+          </p>
+
+          {/* Prezzi */}
+          <Link
+            href="/prezzi"
+            onClick={onClose}
+            className={`block rounded-xl px-4 py-3 text-white transition hover:bg-white/10 ${
+              isActive("/prezzi")
+                ? "bg-white/15 shadow-lg backdrop-blur-md"
+                : "bg-white/5 shadow-sm"
+            }`}
+          >
+            Prezzi
+          </Link>
+
+          {/* Come funziona */}
+          <Link
+            href="/come-funziona"
+            onClick={onClose}
+            className={`block rounded-xl px-4 py-3 text-white transition hover:bg-white/10 ${
+              isActive("/come-funziona")
+                ? "bg-white/15 shadow-lg backdrop-blur-md"
+                : "bg-white/5 shadow-sm"
+            }`}
+          >
+            Come funziona
+          </Link>
+
+          {/* FAQ */}
+          <Link
+            href="/faq"
+            onClick={onClose}
+            className={`block rounded-xl px-4 py-3 text-white transition hover:bg-white/10 ${
+              isActive("/faq")
+                ? "bg-white/15 shadow-lg backdrop-blur-md"
+                : "bg-white/5 shadow-sm"
+            }`}
+          >
+            FAQ
+          </Link>
+
+          {/* Info / Legale */}
+          <Link
+            href="/info"
+            onClick={onClose}
+            className={`block rounded-xl px-4 py-3 text-white transition hover:bg-white/10 ${
+              isActive("/info")
+                ? "bg-white/15 shadow-lg backdrop-blur-md"
+                : "bg-white/5 shadow-sm"
+            }`}
+          >
+            Info / Legale
+          </Link>
+        </nav>
 
         {/* Footer */}
         {user && (

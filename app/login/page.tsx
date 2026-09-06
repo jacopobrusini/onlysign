@@ -74,7 +74,8 @@ export default function LoginPage() {
           {/* Titolo */}
           <div className="mb-8 text-center">
             <h1 className="text-4xl font-bold tracking-tight">
-              Accedi a onlySign
+              Accedi a <span className="text-white">only</span>
+            <span className="text-zinc-400">Sign</span>
             </h1>
 
             <p className="mt-3 text-zinc-400">

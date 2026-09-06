@@ -11,7 +11,7 @@ const steps = [
     number: "02",
     title: "Aggiungi il tuo dispositivo",
     description:
-      "Aggiungi il dispositivo che vuoi utilizzare inserendo il relativo UDID. Puoi anche condividere il link per ottenere l'UDID.",
+      "Aggiungi il dispositivo che vuoi utilizzare installando il profilo per il riconoscimento dell'UDID."
   },
   {
     number: "03",
