@@ -17,6 +17,9 @@ type DeviceResponse = {
 export async function POST(request: Request) {
   try {
     const body = await request.text();
+    console.log("=== DEVICE CALLBACK ===");
+console.log("Content-Type:", request.headers.get("content-type"));
+console.log("Body:", body);
 
     if (!body) {
       return new NextResponse("Invalid request.", {
