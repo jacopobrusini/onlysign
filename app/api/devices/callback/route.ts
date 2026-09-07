@@ -544,7 +544,7 @@ function createFinalConfigurationProfile(
       "it.onlysign.final",
 
     PayloadDisplayName:
-      "Registrazione dispositivo.",
+      "Registrazione dispositivo",
 
     PayloadDescription:
       "Registrazione del dispositivo su onlySign completata, è possibile rimuovere questo profilo.",
@@ -1042,12 +1042,26 @@ export async function POST(
        * ======================================================
        */
 
-      await db.orm.public.Device.create({
+      const product = response.attributes.product?.trim();
+const version = response.attributes.version?.trim();
+
+if (!product || !version) {
+  console.error("Device attributes incomplete:", {
+    product,
+    version,
+  });
+
+  return NextResponse.json(
+    { error: "Informazioni del dispositivo incomplete." },
+    { status: 400 }
+  );
+}
+
+await db.orm.public.Device.create({
   userId: registration.userId,
   udid,
-  model: response.attributes.product?.trim() || null,
-  product: response.attributes.product?.trim() || null,
-  osVersion: response.attributes.version?.trim() || null,
+  product,
+  version,
 });
 
       console.log(

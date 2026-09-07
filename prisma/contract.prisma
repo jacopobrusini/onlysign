@@ -83,14 +83,11 @@ model AccountDeletionToken {
 }
 
 model Device {
-  id          Int      @id @default(autoincrement())
-  userId      Int
-  udid        String   @unique
-  model       String?
-  product     String?
-  osVersion   String?
-  createdAt   DateTime @default(now())
-  updatedAt   temporal.updatedAt()
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  udid      String   @unique
+  product   String
+  version   String
 
   user User @relation(fields: [userId], references: [id])
 }

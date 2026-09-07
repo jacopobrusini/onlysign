@@ -36,7 +36,6 @@ export default async function DevicePage({ params }: DevicePageProps) {
   }
 
   const deviceName =
-    device.model ||
     device.product ||
     "Dispositivo Apple";
 
@@ -103,8 +102,8 @@ export default async function DevicePage({ params }: DevicePageProps) {
                 </p>
 
                 <p className="mt-2 text-white">
-                  {device.osVersion
-                    ? `iOS ${device.osVersion}`
+                  {device.version
+                    ? `iOS ${device.version}`
                     : "Non disponibile"}
                 </p>
               </div>

@@ -116,13 +116,6 @@
           },
           "Device": {
             "fields": {
-              "createdAt": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/timestamptz-temporal@1",
-                  "kind": "scalar"
-                }
-              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -130,22 +123,8 @@
                   "kind": "scalar"
                 }
               },
-              "model": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "osVersion": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
               "product": {
-                "nullable": true,
+                "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
@@ -158,17 +137,17 @@
                   "kind": "scalar"
                 }
               },
-              "updatedAt": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/timestamptz-temporal@1",
-                  "kind": "scalar"
-                }
-              },
               "userId": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "version": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               }
@@ -192,17 +171,8 @@
             },
             "storage": {
               "fields": {
-                "createdAt": {
-                  "column": "createdAt"
-                },
                 "id": {
                   "column": "id"
-                },
-                "model": {
-                  "column": "model"
-                },
-                "osVersion": {
-                  "column": "osVersion"
                 },
                 "product": {
                   "column": "product"
@@ -210,11 +180,11 @@
                 "udid": {
                   "column": "udid"
                 },
-                "updatedAt": {
-                  "column": "updatedAt"
-                },
                 "userId": {
                   "column": "userId"
+                },
+                "version": {
+                  "column": "version"
                 }
               },
               "namespaceId": "public",
@@ -799,15 +769,6 @@
             },
             "device": {
               "columns": {
-                "createdAt": {
-                  "codecId": "pg/timestamptz-temporal@1",
-                  "default": {
-                    "expression": "now()",
-                    "kind": "function"
-                  },
-                  "nativeType": "timestamptz",
-                  "nullable": false
-                },
                 "id": {
                   "codecId": "pg/int4@1",
                   "default": {
@@ -817,34 +778,24 @@
                   "nativeType": "int4",
                   "nullable": false
                 },
-                "model": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": true
-                },
-                "osVersion": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": true
-                },
                 "product": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
-                  "nullable": true
+                  "nullable": false
                 },
                 "udid": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
-                "updatedAt": {
-                  "codecId": "pg/timestamptz-temporal@1",
-                  "nativeType": "timestamptz",
-                  "nullable": false
-                },
                 "userId": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
+                  "nullable": false
+                },
+                "version": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": false
                 }
               },
@@ -1278,27 +1229,12 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "d3309a2b0384e097067a3658b4dbeb456a5c7238bbdee798effa9e9398466e3c"
+    "storageHash": "0bf855a5e46fb88a4878a6fbfecea87023646e29a193b3a7c7e9fc020f16e87c"
   },
   "execution": {
-    "executionHash": "53be9019a4809a794dd5bad9bff3785f00c81abc36298f89a908c023b6e3fea2",
+    "executionHash": "eab594c7ae5d605f3ec23efb87abfb84738b65ef9804d7f3134ad6d40ab02ce0",
     "mutations": {
       "defaults": [
-        {
-          "onCreate": {
-            "id": "instantNow",
-            "kind": "generator"
-          },
-          "onUpdate": {
-            "id": "instantNow",
-            "kind": "generator"
-          },
-          "ref": {
-            "column": "updatedAt",
-            "namespace": "public",
-            "table": "device"
-          }
-        },
         {
           "onCreate": {
             "id": "instantNow",

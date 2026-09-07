@@ -87,12 +87,12 @@ export default async function DispositiviPage() {
 
                       <div className="min-w-0">
                         <h2 className="text-lg font-semibold">
-                          {device.model || device.product || "Dispositivo Apple"}
+                          {device.product || "Dispositivo Apple"}
                         </h2>
 
                         <p className="mt-1 text-sm text-zinc-400">
-                          {device.osVersion
-                            ? `iOS ${device.osVersion}`
+                          {device.version
+                            ? `iOS ${device.version}`
                             : "Versione iOS non disponibile"}
                         </p>
                       </div>

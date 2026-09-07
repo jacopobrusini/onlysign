@@ -116,14 +116,12 @@ export default async function Dashboard() {
 
                       <div className="min-w-0">
                         <p className="font-medium">
-                          {device.model ||
-                            device.product ||
-                            "Dispositivo Apple"}
+                          {device.product || "Dispositivo Apple"}
                         </p>
 
                         <p className="mt-1 truncate text-xs text-white/40">
-                          {device.osVersion
-                            ? `iOS ${device.osVersion}`
+                          {device.version
+                            ? `iOS ${device.version}`
                             : "Versione iOS non disponibile"}
                           {" · "}
                           UDID: {device.udid}

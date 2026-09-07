@@ -254,7 +254,7 @@ export type FieldOutputTypes = {
       readonly udid: CodecTypes['pg/text@1']['output'];
       readonly model: CodecTypes['pg/text@1']['output'] | null;
       readonly product: CodecTypes['pg/text@1']['output'] | null;
-      readonly osVersion: CodecTypes['pg/text@1']['output'] | null;
+      readonly version: CodecTypes['pg/text@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
@@ -313,7 +313,7 @@ export type FieldInputTypes = {
       readonly udid: CodecTypes['pg/text@1']['input'];
       readonly model: CodecTypes['pg/text@1']['input'] | null;
       readonly product: CodecTypes['pg/text@1']['input'] | null;
-      readonly osVersion: CodecTypes['pg/text@1']['input'] | null;
+      readonly version: CodecTypes['pg/text@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
@@ -370,7 +370,7 @@ export type StorageColumnTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly id: CodecTypes['pg/int4@1']['output'];
       readonly model: CodecTypes['pg/text@1']['output'] | null;
-      readonly osVersion: CodecTypes['pg/text@1']['output'] | null;
+      readonly version: CodecTypes['pg/text@1']['output'] | null;
       readonly product: CodecTypes['pg/text@1']['output'] | null;
       readonly udid: CodecTypes['pg/text@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -429,7 +429,7 @@ export type StorageColumnInputTypes = {
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly id: CodecTypes['pg/int4@1']['input'];
       readonly model: CodecTypes['pg/text@1']['input'] | null;
-      readonly osVersion: CodecTypes['pg/text@1']['input'] | null;
+      readonly version: CodecTypes['pg/text@1']['input'] | null;
       readonly product: CodecTypes['pg/text@1']['input'] | null;
       readonly udid: CodecTypes['pg/text@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
@@ -582,7 +582,7 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: true;
                 };
-                readonly osVersion: {
+                readonly version: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: true;
@@ -1024,7 +1024,7 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
-              readonly osVersion: {
+              readonly version: {
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
@@ -1062,7 +1062,7 @@ type ContractBase = Omit<
                 readonly udid: { readonly column: 'udid' };
                 readonly model: { readonly column: 'model' };
                 readonly product: { readonly column: 'product' };
-                readonly osVersion: { readonly column: 'osVersion' };
+                readonly version: { readonly column: 'version' };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };
               };
