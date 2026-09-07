@@ -544,7 +544,7 @@ function createFinalConfigurationProfile(
       "it.onlysign.final",
 
     PayloadDisplayName:
-      "onlySign — Completamento registrazione",
+      "Registrazione dispositivo.",
 
     PayloadDescription:
       "Registrazione del dispositivo su onlySign completata, è possibile rimuovere questo profilo.",
