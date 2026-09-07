@@ -1,5 +1,8 @@
+import DeleteDeviceButton from "./DeleteDeviceButton";
 import Link from "next/link";
 import Header from "@/components/Header";
+import { getSession } from "@/lib/session";
+import { db } from "@/prisma/db";
 
 type DevicePageProps = {
   params: Promise<{
@@ -8,22 +11,34 @@ type DevicePageProps = {
 };
 
 export default async function DevicePage({ params }: DevicePageProps) {
-  const { id } = await params;
+  const session = await getSession();
 
-  const device =
-    id === "2"
-      ? {
-          name: "iPhone 13",
-          ios: "iOS 18.5",
-          udid: "B2C3D4E5-F6A7-8901-BCDE-2345678901AB",
-          certificateReady: true,
-        }
-      : {
-          name: "iPhone 15 Pro",
-          ios: "iOS 18.6",
-          udid: "A1B2C3D4-E5F6-7890-ABCD-1234567890AB",
-          certificateReady: false,
-        };
+  if (!session) {
+    return null;
+  }
+
+  const { id } = await params;
+  const deviceId = Number(id);
+
+  if (!Number.isInteger(deviceId)) {
+    return null;
+  }
+
+  const device = await db.orm.public.Device
+    .where({
+      id: deviceId,
+      userId: session.user.id,
+    })
+    .first();
+
+  if (!device) {
+    return null;
+  }
+
+  const deviceName =
+    device.model ||
+    device.product ||
+    "Dispositivo Apple";
 
   return (
     <main
@@ -42,16 +57,17 @@ export default async function DevicePage({ params }: DevicePageProps) {
             </p>
 
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-              {device.name}
+              {deviceName}
             </h1>
 
             <p className="mt-3 text-white/60">
-              Gestisci il dispositivo e il relativo certificato.
+              Visualizza le informazioni del dispositivo.
             </p>
           </div>
 
           {/* Informazioni dispositivo */}
           <div className="rounded-2xl border border-white/10 bg-black/20 p-6 shadow-xl backdrop-blur-xl">
+
             <h2 className="text-xl font-semibold">
               Informazioni dispositivo
             </h2>
@@ -65,7 +81,18 @@ export default async function DevicePage({ params }: DevicePageProps) {
                 </p>
 
                 <p className="mt-2 text-white">
-                  {device.name}
+                  {deviceName}
+                </p>
+              </div>
+
+              {/* Prodotto */}
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-white/40">
+                  Prodotto
+                </p>
+
+                <p className="mt-2 text-white">
+                  {device.product || "Non disponibile"}
                 </p>
               </div>
 
@@ -76,7 +103,9 @@ export default async function DevicePage({ params }: DevicePageProps) {
                 </p>
 
                 <p className="mt-2 text-white">
-                  {device.ios}
+                  {device.osVersion
+                    ? `iOS ${device.osVersion}`
+                    : "Non disponibile"}
                 </p>
               </div>
 
@@ -93,60 +122,7 @@ export default async function DevicePage({ params }: DevicePageProps) {
 
             </div>
           </div>
-
-          {/* Certificato */}
-          <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-6 shadow-xl backdrop-blur-xl">
-
-            <h2 className="text-xl font-semibold">
-              Certificato
-            </h2>
-
-            <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-
-              <div className="flex items-center gap-3">
-
-                <span
-                  className={`h-2.5 w-2.5 rounded-full ${
-                    device.certificateReady
-                      ? "bg-emerald-400"
-                      : "bg-red-400"
-                  }`}
-                />
-
-                <span
-                  className={`text-sm font-medium ${
-                    device.certificateReady
-                      ? "text-emerald-300"
-                      : "text-red-300"
-                  }`}
-                >
-                  {device.certificateReady
-                    ? "Certificato pronto"
-                    : "Certificato non acquistato"}
-                </span>
-
-              </div>
-
-              {device.certificateReady ? (
-                <button
-                  type="button"
-                  className="rounded-xl bg-white px-6 py-3 text-center font-medium text-black transition hover:bg-zinc-200"
-                >
-                  Scarica certificato
-                </button>
-              ) : (
-                <Link
-                  href="/prezzi"
-                  className="rounded-xl bg-white px-6 py-3 text-center font-medium text-black transition hover:bg-zinc-200"
-                >
-                  Acquista certificato
-                </Link>
-              )}
-
-            </div>
-
-          </div>
-
+<DeleteDeviceButton deviceId={device.id} />
           {/* Torna ai dispositivi */}
           <div className="mt-8 text-center">
             <Link

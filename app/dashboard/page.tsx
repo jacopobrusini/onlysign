@@ -1,10 +1,22 @@
 import Link from "next/link";
 import Header from "@/components/Header";
 import { getSession } from "@/lib/session";
+import { db } from "@/prisma/db";
 
 export default async function Dashboard() {
   const session = await getSession();
-  const username = session?.user.username ?? "utente";
+
+  if (!session) {
+    return null;
+  }
+
+  const username = session.user.username;
+
+  const devices = await db.orm.public.Device
+    .where({
+      userId: session.user.id,
+    })
+    .all();
 
   return (
     <main
@@ -69,63 +81,65 @@ export default async function Dashboard() {
               </p>
             </div>
 
+            {/* Elenco dispositivi */}
             <div className="mt-6 space-y-3">
 
-              {/* iPhone 15 Pro */}
-              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4">
-                <div className="flex min-w-0 items-center gap-4">
+              {devices.length === 0 ? (
 
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/30 text-xl">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-black/30 text-2xl">
                     📱
                   </div>
 
-                  <div className="min-w-0">
-                    <p className="font-medium">
-                      iPhone 15 Pro
-                    </p>
+                  <p className="mt-4 font-medium">
+                    Nessun dispositivo registrato
+                  </p>
 
-                    <p className="mt-1 text-xs text-white/40">
-                      iOS 18.6 · UDID: A1B2C3D4-...-7890AB
-                    </p>
+                  <p className="mt-1 text-sm text-white/40">
+                    Aggiungi un dispositivo per iniziare.
+                  </p>
+                </div>
+
+              ) : (
+
+                devices.map((device) => (
+                  <div
+                    key={device.id}
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4"
+                  >
+
+                    <div className="flex min-w-0 items-center gap-4">
+
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/30 text-xl">
+                        📱
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="font-medium">
+                          {device.model ||
+                            device.product ||
+                            "Dispositivo Apple"}
+                        </p>
+
+                        <p className="mt-1 truncate text-xs text-white/40">
+                          {device.osVersion
+                            ? `iOS ${device.osVersion}`
+                            : "Versione iOS non disponibile"}
+                          {" · "}
+                          UDID: {device.udid}
+                        </p>
+                      </div>
+
+                    </div>
+
+                    <span className="ml-4 shrink-0 text-sm font-medium text-white/60">
+                      →
+                    </span>
+
                   </div>
-                </div>
+                ))
 
-                <div className="ml-4 flex shrink-0 items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-
-                  <span className="hidden text-xs text-emerald-300 sm:inline">
-                    Certificato pronto
-                  </span>
-                </div>
-              </div>
-
-              {/* iPhone 13 */}
-              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4">
-                <div className="flex min-w-0 items-center gap-4">
-
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/30 text-xl">
-                    📱
-                  </div>
-
-                  <div className="min-w-0">
-                    <p className="font-medium">
-                      iPhone 13
-                    </p>
-
-                    <p className="mt-1 text-xs text-white/40">
-                      iOS 18.5 · UDID: B2C3D4E5-...-8901AB
-                    </p>
-                  </div>
-                </div>
-
-                <div className="ml-4 flex shrink-0 items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
-
-                  <span className="hidden text-xs text-red-300 sm:inline">
-                    Acquista certificato
-                  </span>
-                </div>
-              </div>
+              )}
 
             </div>
 

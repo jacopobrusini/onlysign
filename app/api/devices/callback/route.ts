@@ -83,7 +83,7 @@ function createConfigurationProfile(challenge: string) {
 <string>it.onlysign.device-registration</string>
 
 <key>PayloadDisplayName</key>
-<string>onlySign — Registrazione dispositivo</string>
+<string>Registrazione dispositivo</string>
 
 <key>PayloadDescription</key>
 <string>Questo profilo è necessario per completare la registrazione del tuo dispositivo su onlySign. Viene utilizzato durante la procedura per verificare l'identità del dispositivo e associarlo al tuo account. Il profilo non consente a onlySign di accedere ai tuoi dati personali, alle tue foto o ai tuoi contenuti.</string>
@@ -547,7 +547,7 @@ function createFinalConfigurationProfile(
       "onlySign — Completamento registrazione",
 
     PayloadDescription:
-      "Completamento della registrazione del dispositivo su onlySign.",
+      "Registrazione del dispositivo su onlySign completata, è possibile rimuovere questo profilo.",
 
     PayloadOrganization:
       "onlySign",
