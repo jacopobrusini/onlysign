@@ -43,12 +43,12 @@ export default function AggiungiDispositivoPage() {
             </p>
 
             {/* Installa profilo */}
-            <a
+            <Link
   href="/api/devices/register"
   className="mt-7 block w-full rounded-xl bg-white py-3 font-medium text-black transition hover:bg-zinc-200"
 >
   Installa profilo
-</a>
+</Link>
 
             {/* Torna indietro */}
             <div className="mt-6 border-t border-white/10 pt-6">
