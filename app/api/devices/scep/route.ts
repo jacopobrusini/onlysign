@@ -719,6 +719,20 @@ function findEncryptedContent(
 
   const contentInfo =
     signedData.value[2];
+    console.log(
+  "=== SCEP CONTENT INFO ASN1 ==="
+);
+
+console.dir(
+  contentInfo,
+  {
+    depth: 8
+  }
+);
+
+console.log(
+  "=== END SCEP CONTENT INFO ASN1 ==="
+);
 
   if (
     !contentInfo ||
