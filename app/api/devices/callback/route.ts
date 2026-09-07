@@ -1,4 +1,6 @@
 import forge from "node-forge";
+import { build as buildPlist } from "plist";
+import type { PlistValue } from "plist";
 import { createHash, randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 
@@ -10,120 +12,153 @@ export const runtime = "nodejs";
 
 /*
  * ============================================================
- * Crea il configuration profile che verrà restituito
- * all'iPhone dopo la registrazione.
+ * HELPERS
  * ============================================================
  */
-function createConfigurationProfile(
-  challenge: string
-) {
-  const payloadUUID =
-    randomUUID().toUpperCase();
 
-  const scepUUID =
-    randomUUID().toUpperCase();
+function bytesToUint8Array(bytes: string): Uint8Array {
+  const result = new Uint8Array(bytes.length);
+
+  for (let i = 0; i < bytes.length; i++) {
+    result[i] = bytes.charCodeAt(i) & 0xff;
+  }
+
+  return result;
+}
+
+function uint8ArrayToBinary(bytes: Uint8Array): string {
+  let result = "";
+
+  const chunkSize = 0x8000;
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    result += String.fromCharCode(
+      ...bytes.subarray(
+        i,
+        Math.min(i + chunkSize, bytes.length)
+      )
+    );
+  }
+
+  return result;
+}
+
+/*
+ * ============================================================
+ * Crea il configuration profile iniziale che verrà restituito
+ * all'iPhone dopo il primo callback.
+ *
+ * Questo profilo contiene il payload SCEP.
+ * ============================================================
+ */
+
+function createConfigurationProfile(challenge: string) {
+  const payloadUUID = randomUUID().toUpperCase();
+
+  const scepUUID = randomUUID().toUpperCase();
 
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
     "http://localhost:3000";
 
-  const scepUrl =
-    `${appUrl}/api/devices/scep`;
+  const scepUrl = `${appUrl}/api/devices/scep`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
+
 <!DOCTYPE plist PUBLIC "-//Apple Inc//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+
 <plist version="1.0">
 <dict>
 
-    <key>PayloadVersion</key>
-    <integer>1</integer>
+<key>PayloadVersion</key>
+<integer>1</integer>
 
-    <key>PayloadUUID</key>
-    <string>${payloadUUID}</string>
+<key>PayloadUUID</key>
+<string>${payloadUUID}</string>
 
-    <key>PayloadType</key>
-    <string>Configuration</string>
+<key>PayloadType</key>
+<string>Configuration</string>
 
-    <key>PayloadIdentifier</key>
-    <string>it.onlysign.device-registration</string>
+<key>PayloadIdentifier</key>
+<string>it.onlysign.device-registration</string>
 
-    <key>PayloadDisplayName</key>
-    <string>onlySign - Registrazione dispositivo</string>
+<key>PayloadDisplayName</key>
+<string>onlySign - Registrazione dispositivo</string>
 
-    <key>PayloadDescription</key>
-    <string>Registrazione del dispositivo su onlySign.</string>
+<key>PayloadDescription</key>
+<string>Registrazione del dispositivo su onlySign.</string>
 
-    <key>PayloadOrganization</key>
-    <string>onlySign</string>
+<key>PayloadOrganization</key>
+<string>onlySign</string>
 
-    <key>PayloadContent</key>
-    <array>
+<key>PayloadContent</key>
+<array>
 
+    <dict>
+
+        <key>PayloadContent</key>
         <dict>
 
-            <key>PayloadContent</key>
-            <dict>
+            <key>URL</key>
+            <string>${scepUrl}</string>
 
-                <key>URL</key>
-                <string>${scepUrl}</string>
+            <key>Name</key>
+            <string>onlySignDevice</string>
 
-                <key>Name</key>
-                <string>onlySignDevice</string>
-
-                <key>Subject</key>
+            <key>Subject</key>
+            <array>
                 <array>
                     <array>
-                        <array>
-                            <string>O</string>
-                            <string>onlySign</string>
-                        </array>
-                    </array>
-                    <array>
-                        <array>
-                            <string>CN</string>
-                            <string>onlySign Device</string>
-                        </array>
+                        <string>O</string>
+                        <string>onlySign</string>
                     </array>
                 </array>
+                <array>
+                    <array>
+                        <string>CN</string>
+                        <string>onlySign Device</string>
+                    </array>
+                </array>
+            </array>
 
-                <key>Challenge</key>
-                <string>${challenge}</string>
+            <key>Challenge</key>
+            <string>${challenge}</string>
 
-                <key>Keysize</key>
-                <integer>2048</integer>
+            <key>Keysize</key>
+            <integer>2048</integer>
 
-                <key>Key Type</key>
-                <string>RSA</string>
+            <key>Key Type</key>
+            <string>RSA</string>
 
-                <key>Key Usage</key>
-                <integer>5</integer>
-
-            </dict>
-
-            <key>PayloadDescription</key>
-            <string>Provides onlySign device identity</string>
-
-            <key>PayloadUUID</key>
-            <string>${scepUUID}</string>
-
-            <key>PayloadType</key>
-            <string>com.apple.security.scep</string>
-
-            <key>PayloadDisplayName</key>
-            <string>onlySign Device Identity</string>
-
-            <key>PayloadVersion</key>
-            <integer>1</integer>
-
-            <key>PayloadOrganization</key>
-            <string>onlySign</string>
-
-            <key>PayloadIdentifier</key>
-            <string>it.onlysign.scep</string>
+            <key>Key Usage</key>
+            <integer>5</integer>
 
         </dict>
 
-    </array>
+        <key>PayloadDescription</key>
+        <string>Provides onlySign device identity</string>
+
+        <key>PayloadUUID</key>
+        <string>${scepUUID}</string>
+
+        <key>PayloadType</key>
+        <string>com.apple.security.scep</string>
+
+        <key>PayloadDisplayName</key>
+        <string>onlySign Device Identity</string>
+
+        <key>PayloadVersion</key>
+        <integer>1</integer>
+
+        <key>PayloadOrganization</key>
+        <string>onlySign</string>
+
+        <key>PayloadIdentifier</key>
+        <string>it.onlysign.scep</string>
+
+    </dict>
+
+</array>
 
 </dict>
 </plist>`;
@@ -131,10 +166,11 @@ function createConfigurationProfile(
 
 /*
  * ============================================================
- * Firma il configuration profile con il certificato contenuto
+ * Firma un configuration profile con il certificato contenuto
  * nel PKCS#12.
  * ============================================================
  */
+
 async function signConfigurationProfile(
   configuration: string
 ): Promise<Uint8Array> {
@@ -159,24 +195,21 @@ async function signConfigurationProfile(
   /*
    * Base64 → DER
    */
-  const p12Der =
-    forge.util.decode64(p12Base64);
+  const p12Der = forge.util.decode64(p12Base64);
 
   /*
    * DER → ASN.1
    */
-  const asn1 =
-    forge.asn1.fromDer(p12Der);
+  const asn1 = forge.asn1.fromDer(p12Der);
 
   /*
    * ASN.1 → PKCS#12
    */
-  const p12 =
-    forge.pkcs12.pkcs12FromAsn1(
-      asn1,
-      false,
-      p12Password
-    );
+  const p12 = forge.pkcs12.pkcs12FromAsn1(
+    asn1,
+    false,
+    p12Password
+  );
 
   /*
    * Recuperiamo la chiave privata.
@@ -194,13 +227,13 @@ async function signConfigurationProfile(
    */
   const certBags =
     p12.getBags({
-      bagType:
-        forge.pki.oids.certBag,
+      bagType: forge.pki.oids.certBag,
     })[
       forge.pki.oids.certBag
     ] ?? [];
 
   const keyBag = keyBags[0];
+
   const certBag = certBags[0];
 
   if (!keyBag?.key) {
@@ -216,37 +249,32 @@ async function signConfigurationProfile(
   }
 
   const privateKey = keyBag.key;
+
   const certificate = certBag.cert;
 
   /*
-   * Prepariamo il contenuto da firmare.
+   * Prepariamo il contenuto.
    */
-  const content =
-    forge.util.createBuffer(
-      configuration,
-      "utf8"
-    );
+  const content = forge.util.createBuffer(
+    configuration,
+    "utf8"
+  );
 
   /*
-   * Creiamo CMS / PKCS#7 SignedData.
+   * CMS / PKCS#7 SignedData.
    */
   const signedData =
     forge.pkcs7.createSignedData();
 
   signedData.content = content;
 
-  /*
-   * Inseriamo il certificato del signer.
-   */
   signedData.addCertificate(
     certificate
   );
 
-  /*
-   * Configuriamo la firma RSA + SHA-256.
-   */
   signedData.addSigner({
     certificate,
+
     key: privateKey,
 
     digestAlgorithm:
@@ -283,26 +311,254 @@ async function signConfigurationProfile(
   /*
    * CMS ASN.1 → DER.
    */
-  const der =
-    forge.asn1
-      .toDer(
-        signedData.toAsn1()
-      )
-      .getBytes();
+  const der = forge.asn1
+    .toDer(signedData.toAsn1())
+    .getBytes();
 
-  /*
-   * Buffer Node → Uint8Array.
-   */
-  const result = new Uint8Array(
-    der.length
+  return bytesToUint8Array(der);
+}
+
+/*
+ * ============================================================
+ * Estrae il certificato del signer dal CMS ricevuto.
+ *
+ * Nel primo callback il signer è Apple.
+ *
+ * Nel secondo callback il signer è il certificato
+ * "onlySign Device" appena emesso da SCEP.
+ * ============================================================
+ */
+
+function extractSignerCertificate(
+  body: ArrayBuffer
+): forge.pki.Certificate {
+  const binary = uint8ArrayToBinary(
+    new Uint8Array(body)
   );
 
-  for (let i = 0; i < der.length; i++) {
-    result[i] =
-      der.charCodeAt(i) & 0xff;
+  const asn1 = forge.asn1.fromDer(binary);
+
+  /*
+   * Il callback Profile Service è un CMS SignedData.
+   */
+  const message =
+    forge.pkcs7.messageFromAsn1(asn1);
+
+  /*
+   * Le typings di node-forge espongono message come
+   * union SignedData | EnvelopedData.
+   *
+   * Qui ci interessa la proprietà certificates
+   * presente nel SignedData.
+   */
+  const signedData =
+    message as unknown as {
+      certificates?: forge.pki.Certificate[];
+    };
+
+  /*
+   * Recuperiamo i certificati inclusi nel CMS.
+   */
+  const certificates =
+    signedData.certificates;
+
+  if (
+    !certificates ||
+    certificates.length === 0
+  ) {
+    throw new Error(
+      "Nessun certificato trovato nel CMS del dispositivo."
+    );
   }
 
-  return result;
+  /*
+   * Il primo certificato è il signer del callback.
+   */
+  const certificate = certificates[0];
+
+  if (!certificate) {
+    throw new Error(
+      "Certificato signer non disponibile."
+    );
+  }
+
+  return certificate;
+}
+
+/*
+ * ============================================================
+ * Crea il payload finale da installare sul dispositivo.
+ *
+ * Il certificato SCEP è già stato installato durante la fase
+ * precedente.
+ *
+ * Per il primo test della fase OTA finale inseriamo un Web Clip
+ * innocuo che permette di verificare che il profilo cifrato
+ * venga realmente decrittato e installato da iOS.
+ * ============================================================
+ */
+
+function createFinalPayloads(): PlistValue[] {
+  const payloadUUID =
+    randomUUID().toUpperCase();
+
+  return [
+    {
+      PayloadVersion: 1,
+
+      PayloadUUID:
+        payloadUUID,
+
+      PayloadType:
+        "com.apple.webClip.managed",
+
+      PayloadIdentifier:
+        "it.onlysign.final.webclip",
+
+      PayloadDisplayName:
+        "onlySign",
+
+      PayloadDescription:
+        "Accesso rapido a onlySign.",
+
+      PayloadOrganization:
+        "onlySign",
+
+      IsRemovable: true,
+
+      Label:
+        "onlySign",
+
+      URL:
+        process.env.NEXT_PUBLIC_APP_URL ??
+        "https://onlysign.vercel.app",
+    },
+  ];
+}
+
+/*
+ * ============================================================
+ * Serializza il PayloadContent finale.
+ *
+ * Apple specifica che per EncryptedPayloadContent il contenuto
+ * da cifrare deve essere una property list il cui oggetto
+ * principale è un ARRAY, non un dizionario.
+ * ============================================================
+ */
+
+function serializeFinalPayloads(
+  payloads: PlistValue[]
+): string {
+  return buildPlist(payloads);
+}
+
+/*
+ * ============================================================
+ * Cifra il PayloadContent finale con il certificato del
+ * dispositivo.
+ *
+ * Apple OTA utilizza CMS / PKCS#7 EnvelopedData.
+ *
+ * Usiamo 3DES-CBC per allinearci alla reference implementation
+ * Apple.
+ * ============================================================
+ */
+
+function encryptFinalPayload(
+  payload: string,
+  deviceCertificate: forge.pki.Certificate
+): Uint8Array {
+  const envelopedData =
+    forge.pkcs7.createEnvelopedData();
+
+  /*
+   * Il certificato del dispositivo contiene la chiave
+   * pubblica corrispondente alla chiave privata presente
+   * nel keychain dell'iPhone.
+   */
+  envelopedData.addRecipient(
+    deviceCertificate
+  );
+
+  /*
+   * Payload da cifrare.
+   */
+  envelopedData.content =
+    forge.util.createBuffer(
+      payload,
+      "utf8"
+    );
+
+  /*
+   * Apple usa 3DES-CBC nella reference implementation.
+   */
+  envelopedData.encrypt(
+    undefined,
+    forge.pki.oids["des-EDE3-CBC"]
+  );
+
+  /*
+   * EnvelopedData → DER.
+   */
+  const der = forge.asn1
+    .toDer(envelopedData.toAsn1())
+    .getBytes();
+
+  return bytesToUint8Array(der);
+}
+
+/*
+ * ============================================================
+ * Crea il configuration profile finale cifrato.
+ *
+ * Struttura:
+ *
+ * Configuration
+ * ├── PayloadVersion
+ * ├── PayloadUUID
+ * ├── PayloadType
+ * ├── PayloadIdentifier
+ * ├── PayloadDisplayName
+ * ├── PayloadDescription
+ * ├── PayloadOrganization
+ * └── EncryptedPayloadContent
+ *
+ * PayloadContent NON viene incluso nel profilo esterno.
+ * ============================================================
+ */
+
+function createFinalConfigurationProfile(
+  encryptedPayload: Uint8Array
+): string {
+  const payloadUUID =
+    randomUUID().toUpperCase();
+
+  return buildPlist({
+    PayloadVersion: 1,
+
+    PayloadUUID:
+      payloadUUID,
+
+    PayloadType:
+      "Configuration",
+
+    PayloadIdentifier:
+      "it.onlysign.final",
+
+    PayloadDisplayName:
+      "onlySign",
+
+    PayloadDescription:
+      "Configurazione finale onlySign del dispositivo.",
+
+    PayloadOrganization:
+      "onlySign",
+
+    EncryptedPayloadContent:
+      Buffer.from(
+        encryptedPayload
+      ),
+  });
 }
 
 /*
@@ -310,6 +566,7 @@ async function signConfigurationProfile(
  * PROFILE SERVICE CALLBACK
  * ============================================================
  */
+
 export async function POST(
   request: Request
 ) {
@@ -320,7 +577,9 @@ export async function POST(
     const body =
       await request.arrayBuffer();
 
-    if (body.byteLength === 0) {
+    if (
+      body.byteLength === 0
+    ) {
       return new NextResponse(
         "Invalid request.",
         {
@@ -331,17 +590,10 @@ export async function POST(
 
     /*
      * ========================================================
-     * iPhone → server
-     *
-     * Il dispositivo invia un CMS / PKCS#7 contenente:
-     *
-     * UDID
-     * DEVICE_NAME
-     * VERSION
-     * PRODUCT
-     * CHALLENGE
+     * Parse della risposta Profile Service.
      * ========================================================
      */
+
     const result =
       await parseProfileServiceResponse(
         body,
@@ -397,13 +649,10 @@ export async function POST(
 
     /*
      * ========================================================
-     * Verifica firma del dispositivo
+     * Verifica firma.
      * ========================================================
-     *
-     * La firma deve essere presente e crittograficamente valida.
-     *
-     * Non accettiamo callback privi di firma.
      */
+
     if (
       response.signature.present !==
         true ||
@@ -428,6 +677,7 @@ export async function POST(
      * UDID
      * ========================================================
      */
+
     const udid =
       response.attributes.udid?.trim();
 
@@ -442,37 +692,32 @@ export async function POST(
 
     /*
      * ========================================================
-     * CALLBACK SUCCESSIVO AL SCEP
+     * SECONDO CALLBACK
+     *
+     * Dopo SCEP:
+     *
+     * - challenge assente
+     * - firma valida
+     * - signer = certificato onlySign Device
+     *
+     * Questo NON è un callback da ignorare.
+     *
+     * È la richiesta del profilo finale.
      * ========================================================
-     *
-     * Dopo aver ottenuto il certificato tramite SCEP,
-     * iOS può inviare nuovamente il Profile Service callback.
-     *
-     * Questo secondo callback:
-     *
-     * - contiene l'UDID
-     * - contiene product/version
-     * - contiene una firma valida
-     * - NON contiene necessariamente il CHALLENGE
-     *
-     * In questo caso il dispositivo è già stato registrato
-     * dal primo callback.
-     *
-     * Non dobbiamo quindi cercare una nuova
-     * DeviceRegistration.
      */
+
     if (
       response.challenge === undefined ||
       response.challenge === null
     ) {
       console.log(
-        "No challenge in callback."
+        "=== FINAL OTA PROFILE REQUEST ==="
       );
 
       /*
-       * Verifichiamo che l'UDID sia già presente
-       * nel database.
+       * Il dispositivo deve essere già registrato.
        */
+
       const existingDevice =
         await db.orm.public.Device
           .where({
@@ -482,7 +727,7 @@ export async function POST(
 
       if (!existingDevice) {
         console.error(
-          "Callback without challenge for unknown device:",
+          "Final profile requested for unknown device:",
           udid
         );
 
@@ -494,22 +739,148 @@ export async function POST(
         );
       }
 
+      /*
+       * ======================================================
+       * Estraiamo il certificato del signer direttamente
+       * dal CMS ricevuto.
+       *
+       * NON usiamo response.signature.signers perché quello
+       * contiene informazioni descrittive e non l'oggetto
+       * X.509 necessario per la cifratura.
+       * ======================================================
+       */
+
+      const deviceCertificate =
+        extractSignerCertificate(
+          body
+        );
+
       console.log(
-        "Post-SCEP callback accepted:",
-        udid
+        "Final profile signer subject:",
+        deviceCertificate.subject.attributes
       );
 
       /*
-       * iOS ha completato il proprio ciclo di callback.
-       *
-       * Non dobbiamo creare nuovamente il dispositivo
-       * e non dobbiamo generare un nuovo configuration profile.
+       * ======================================================
+       * Creiamo il PayloadContent finale.
+       * ======================================================
        */
+
+      const finalPayloads =
+        createFinalPayloads();
+
+      console.log(
+        "Final payload count:",
+        finalPayloads.length
+      );
+
+      /*
+       * ======================================================
+       * Array plist → XML plist
+       * ======================================================
+       */
+
+      const serializedPayloads =
+        serializeFinalPayloads(
+          finalPayloads
+        );
+
+      console.log(
+        "Final PayloadContent size:",
+        serializedPayloads.length
+      );
+
+      /*
+       * ======================================================
+       * Cifriamo il PayloadContent con la chiave pubblica
+       * del certificato SCEP del dispositivo.
+       * ======================================================
+       */
+
+      const encryptedPayload =
+        encryptFinalPayload(
+          serializedPayloads,
+          deviceCertificate
+        );
+
+      console.log(
+        "EncryptedPayloadContent size:",
+        encryptedPayload.byteLength
+      );
+
+      /*
+       * ======================================================
+       * Creiamo il configuration profile finale.
+       * ======================================================
+       */
+
+      const finalConfiguration =
+        createFinalConfigurationProfile(
+          encryptedPayload
+        );
+
+      console.log(
+        "=== FINAL CONFIGURATION PROFILE ==="
+      );
+
+      console.log(
+        finalConfiguration
+      );
+
+      console.log(
+        "=== END FINAL CONFIGURATION PROFILE ==="
+      );
+
+      /*
+       * ======================================================
+       * Firmiamo il profilo finale con il certificato
+       * del Profile Service.
+       * ======================================================
+       */
+
+      const signedFinalConfiguration =
+        await signConfigurationProfile(
+          finalConfiguration
+        );
+
+      console.log(
+        "Signed final configuration size:",
+        signedFinalConfiguration.byteLength
+      );
+
+      /*
+       * ======================================================
+       * Restituiamo il profilo finale a iOS.
+       * ======================================================
+       */
+
+      const responseBuffer =
+        new ArrayBuffer(
+          signedFinalConfiguration.byteLength
+        );
+
+      new Uint8Array(
+        responseBuffer
+      ).set(
+        signedFinalConfiguration
+      );
+
+      console.log(
+        "Returning FINAL encrypted profile to device..."
+      );
+
       return new NextResponse(
-        "OK",
+        responseBuffer,
         {
           status: 200,
+
           headers: {
+            "Content-Type":
+              "application/x-apple-aspen-config",
+
+            "Content-Length":
+              signedFinalConfiguration.byteLength.toString(),
+
             "Cache-Control":
               "no-store",
           },
@@ -519,9 +890,10 @@ export async function POST(
 
     /*
      * ========================================================
-     * CHALLENGE DEL PRIMO CALLBACK
+     * PRIMO CALLBACK
      * ========================================================
      */
+
     let challenge: string;
 
     if (
@@ -564,6 +936,7 @@ export async function POST(
      * Recuperiamo la registrazione temporanea.
      * ========================================================
      */
+
     const tokenHash =
       createHash("sha256")
         .update(challenge)
@@ -590,6 +963,7 @@ export async function POST(
      * Controllo scadenza.
      * ========================================================
      */
+
     if (
       Temporal.Instant.compare(
         Temporal.Now.instant(),
@@ -615,6 +989,7 @@ export async function POST(
      * Nome dispositivo.
      * ========================================================
      */
+
     const rawDeviceName =
       response.raw["DEVICE_NAME"];
 
@@ -628,8 +1003,14 @@ export async function POST(
     /*
      * ========================================================
      * Controlliamo se l'UDID è già registrato.
+     *
+     * Se è dello stesso account, NON lo aggiorniamo.
+     * Continuiamo semplicemente.
+     *
+     * Se appartiene a un altro account, 409.
      * ========================================================
      */
+
     const existingDevice =
       await db.orm.public.Device
         .where({
@@ -638,66 +1019,86 @@ export async function POST(
         .first();
 
     if (existingDevice) {
-      await db.orm.public.DeviceRegistration
-        .where({
-          id: registration.id,
-        })
-        .delete();
+      if (
+        existingDevice.userId !==
+        registration.userId
+      ) {
+        console.error(
+          "UDID already registered to another account:",
+          udid
+        );
 
-      return new NextResponse(
-        "Device already registered.",
-        {
-          status: 409,
-        }
+        await db.orm.public.DeviceRegistration
+          .where({
+            id: registration.id,
+          })
+          .delete();
+
+        return new NextResponse(
+          "Device already registered to another account.",
+          {
+            status: 409,
+          }
+        );
+      }
+
+      console.log(
+        "Device already registered to this account:",
+        udid
+      );
+
+      /*
+       * NON aggiorniamo il record.
+       *
+       * Il dispositivo è già corretto.
+       * Continuiamo con il profilo SCEP.
+       */
+    } else {
+      /*
+       * ======================================================
+       * Nuovo dispositivo.
+       * ======================================================
+       */
+
+      await db.orm.public.Device.create({
+        userId:
+          registration.userId,
+
+        udid,
+
+        name:
+          deviceName,
+
+        model:
+          response.attributes.product?.trim() ||
+          null,
+
+        product:
+          response.attributes.product?.trim() ||
+          null,
+
+        osVersion:
+          response.attributes.version?.trim() ||
+          null,
+      });
+
+      console.log(
+        "Device registered successfully:",
+        udid
       );
     }
 
     /*
      * ========================================================
-     * Salviamo il dispositivo.
+     * Creiamo il configuration profile SCEP.
      * ========================================================
      */
-    await db.orm.public.Device.create({
-      userId:
-        registration.userId,
 
-      udid,
-
-      name: deviceName,
-
-      model:
-        response.attributes.product?.trim() ||
-        null,
-
-      product:
-        response.attributes.product?.trim() ||
-        null,
-
-      osVersion:
-        response.attributes.version?.trim() ||
-        null,
-    });
-
-    console.log(
-      "Device registered successfully:",
-      udid
-    );
-
-    /*
-     * ========================================================
-     * Creiamo il configuration profile.
-     * ========================================================
-     */
     const configuration =
       createConfigurationProfile(
         challenge
       );
 
-    /*
-     * ========================================================
-     * DEBUG CONFIGURATION PROFILE
-     * ========================================================
-     */
     console.log(
       "=== CONFIGURATION PROFILE ==="
     );
@@ -712,9 +1113,10 @@ export async function POST(
 
     /*
      * ========================================================
-     * DEBUG SCEP URL
+     * SCEP URL
      * ========================================================
      */
+
     const scepUrl =
       `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/devices/scep`;
 
@@ -729,9 +1131,10 @@ export async function POST(
 
     /*
      * ========================================================
-     * Firmiamo il configuration profile.
+     * Firmiamo il configuration profile SCEP.
      * ========================================================
      */
+
     const signedConfiguration =
       await signConfigurationProfile(
         configuration
@@ -744,11 +1147,13 @@ export async function POST(
 
     /*
      * ========================================================
-     * Registrazione completata.
+     * Challenge one-time.
      *
-     * Il challenge è one-time.
+     * Dopo aver consegnato il profilo SCEP, eliminiamo
+     * la registrazione temporanea.
      * ========================================================
      */
+
     await db.orm.public.DeviceRegistration
       .where({
         id: registration.id,
@@ -757,9 +1162,10 @@ export async function POST(
 
     /*
      * ========================================================
-     * Restituiamo a iOS il CMS / PKCS#7.
+     * Restituiamo il CMS / PKCS#7 a iOS.
      * ========================================================
      */
+
     const responseBuffer =
       new ArrayBuffer(
         signedConfiguration.byteLength
@@ -788,7 +1194,6 @@ export async function POST(
         },
       }
     );
-
   } catch (error) {
     console.error(
       "Device callback error:",
