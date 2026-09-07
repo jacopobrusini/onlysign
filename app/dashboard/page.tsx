@@ -1,6 +1,8 @@
 import Link from "next/link";
 import Header from "@/components/Header";
 import { getSession } from "@/lib/session";
+import { getDeviceModel } from "@/lib/device-model";
+import { getIOSVersion } from "@/lib/ios-version";
 import { db } from "@/prisma/db";
 
 export default async function Dashboard() {
@@ -18,6 +20,21 @@ export default async function Dashboard() {
     })
     .all();
 
+  const devicesWithModels = await Promise.all(
+    devices.map(async (device) => {
+      const [model, iosVersion] = await Promise.all([
+        getDeviceModel(device.product),
+        getIOSVersion(device.product, device.version),
+      ]);
+
+      return {
+        ...device,
+        model,
+        iosVersion,
+      };
+    })
+  );
+
   return (
     <main
       className="min-h-screen bg-cover bg-center bg-fixed text-white"
@@ -27,7 +44,6 @@ export default async function Dashboard() {
 
       <section className="px-6 pb-16 pt-28">
         <div className="mx-auto max-w-6xl">
-
           {/* Titolo */}
           <div className="mb-10">
             <p className="mb-2 text-sm uppercase tracking-[0.3em] text-white/60">
@@ -45,7 +61,6 @@ export default async function Dashboard() {
 
           {/* Token */}
           <div className="grid gap-4 sm:grid-cols-3">
-
             <Link
               href="/prezzi"
               className="block rounded-2xl border border-white/10 bg-black/20 p-6 shadow-xl backdrop-blur-xl transition hover:bg-white/5"
@@ -62,7 +77,6 @@ export default async function Dashboard() {
                 Acquista token →
               </p>
             </Link>
-
           </div>
 
           {/* Dispositivi */}
@@ -70,7 +84,6 @@ export default async function Dashboard() {
             href="/dashboard/dispositivi"
             className="mt-8 block rounded-2xl border border-white/10 bg-black/20 p-6 shadow-xl backdrop-blur-xl transition hover:bg-white/5"
           >
-
             <div>
               <h2 className="text-xl font-semibold">
                 I tuoi dispositivi
@@ -83,9 +96,7 @@ export default async function Dashboard() {
 
             {/* Elenco dispositivi */}
             <div className="mt-6 space-y-3">
-
-              {devices.length === 0 ? (
-
+              {devicesWithModels.length === 0 ? (
                 <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-black/30 text-2xl">
                     📱
@@ -99,46 +110,38 @@ export default async function Dashboard() {
                     Aggiungi un dispositivo per iniziare.
                   </p>
                 </div>
-
               ) : (
-
-                devices.map((device) => (
+                devicesWithModels.map((device) => (
                   <div
                     key={device.id}
                     className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4"
                   >
-
                     <div className="flex min-w-0 items-center gap-4">
-
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/30 text-xl">
                         📱
                       </div>
 
                       <div className="min-w-0">
                         <p className="font-medium">
-                          {device.product || "Dispositivo Apple"}
+                          {device.model}
                         </p>
 
                         <p className="mt-1 truncate text-xs text-white/40">
-                          {device.version
-                            ? `iOS ${device.version}`
+                          {device.iosVersion
+                            ? `iOS ${device.iosVersion}`
                             : "Versione iOS non disponibile"}
                           {" · "}
                           UDID: {device.udid}
                         </p>
                       </div>
-
                     </div>
 
                     <span className="ml-4 shrink-0 text-sm font-medium text-white/60">
                       →
                     </span>
-
                   </div>
                 ))
-
               )}
-
             </div>
 
             <div className="mt-5 text-right">
@@ -146,9 +149,7 @@ export default async function Dashboard() {
                 Gestisci dispositivi →
               </span>
             </div>
-
           </Link>
-
         </div>
       </section>
     </main>

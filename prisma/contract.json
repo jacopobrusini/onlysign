@@ -12,6 +12,10 @@
       "model": "Device",
       "namespace": "public"
     },
+    "deviceModelCache": {
+      "model": "DeviceModelCache",
+      "namespace": "public"
+    },
     "deviceRegistration": {
       "model": "DeviceRegistration",
       "namespace": "public"
@@ -179,6 +183,37 @@
               },
               "namespaceId": "public",
               "table": "device"
+            }
+          },
+          "DeviceModelCache": {
+            "fields": {
+              "identifier": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "model": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "identifier": {
+                  "column": "identifier"
+                },
+                "model": {
+                  "column": "model"
+                }
+              },
+              "namespaceId": "public",
+              "table": "deviceModelCache"
             }
           },
           "DeviceRegistration": {
@@ -761,6 +796,28 @@
                 }
               ]
             },
+            "deviceModelCache": {
+              "columns": {
+                "identifier": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "model": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "identifier"
+                ]
+              },
+              "uniques": []
+            },
             "deviceRegistration": {
               "columns": {
                 "expiresAt": {
@@ -1100,7 +1157,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "8b21e0d750bfc9e7c193d80696f78346bb72375782ddb278b8f59a235588d634"
+    "storageHash": "9bff0f66d5086f0da6938589f3523d3614696870f42a06457c6ad00dfb17323c"
   },
   "capabilities": {
     "postgres": {

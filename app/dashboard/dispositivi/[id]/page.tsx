@@ -2,6 +2,8 @@ import DeleteDeviceButton from "./DeleteDeviceButton";
 import Link from "next/link";
 import Header from "@/components/Header";
 import { getSession } from "@/lib/session";
+import { getDeviceModel } from "@/lib/device-model";
+import { getIOSVersion } from "@/lib/ios-version";
 import { db } from "@/prisma/db";
 
 type DevicePageProps = {
@@ -10,7 +12,9 @@ type DevicePageProps = {
   }>;
 };
 
-export default async function DevicePage({ params }: DevicePageProps) {
+export default async function DevicePage({
+  params,
+}: DevicePageProps) {
   const session = await getSession();
 
   if (!session) {
@@ -35,9 +39,10 @@ export default async function DevicePage({ params }: DevicePageProps) {
     return null;
   }
 
-  const deviceName =
-    device.product ||
-    "Dispositivo Apple";
+  const [deviceName, iosVersion] = await Promise.all([
+    getDeviceModel(device.product),
+    getIOSVersion(device.product, device.version),
+  ]);
 
   return (
     <main
@@ -48,7 +53,6 @@ export default async function DevicePage({ params }: DevicePageProps) {
 
       <section className="px-6 pb-16 pt-28">
         <div className="mx-auto max-w-4xl">
-
           {/* Titolo */}
           <div className="mb-10">
             <p className="mb-2 text-sm uppercase tracking-[0.3em] text-white/60">
@@ -66,13 +70,11 @@ export default async function DevicePage({ params }: DevicePageProps) {
 
           {/* Informazioni dispositivo */}
           <div className="rounded-2xl border border-white/10 bg-black/20 p-6 shadow-xl backdrop-blur-xl">
-
             <h2 className="text-xl font-semibold">
               Informazioni dispositivo
             </h2>
 
             <div className="mt-6 grid gap-5 sm:grid-cols-2">
-
               {/* Modello */}
               <div>
                 <p className="text-xs font-medium uppercase tracking-wider text-white/40">
@@ -84,17 +86,6 @@ export default async function DevicePage({ params }: DevicePageProps) {
                 </p>
               </div>
 
-              {/* Prodotto */}
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-white/40">
-                  Prodotto
-                </p>
-
-                <p className="mt-2 text-white">
-                  {device.product || "Non disponibile"}
-                </p>
-              </div>
-
               {/* iOS */}
               <div>
                 <p className="text-xs font-medium uppercase tracking-wider text-white/40">
@@ -102,8 +93,8 @@ export default async function DevicePage({ params }: DevicePageProps) {
                 </p>
 
                 <p className="mt-2 text-white">
-                  {device.version
-                    ? `iOS ${device.version}`
+                  {iosVersion
+                    ? `iOS ${iosVersion}`
                     : "Non disponibile"}
                 </p>
               </div>
@@ -118,10 +109,11 @@ export default async function DevicePage({ params }: DevicePageProps) {
                   {device.udid}
                 </p>
               </div>
-
             </div>
           </div>
-<DeleteDeviceButton deviceId={device.id} />
+
+          <DeleteDeviceButton deviceId={device.id} />
+
           {/* Torna ai dispositivi */}
           <div className="mt-8 text-center">
             <Link
@@ -131,7 +123,6 @@ export default async function DevicePage({ params }: DevicePageProps) {
               ← Torna ai dispositivi
             </Link>
           </div>
-
         </div>
       </section>
     </main>

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import Header from "@/components/Header";
 import { getSession } from "@/lib/session";
+import { getDeviceModel } from "@/lib/device-model";
+import { getIOSVersion } from "@/lib/ios-version";
 import { db } from "@/prisma/db";
 
 export default async function DispositiviPage() {
@@ -16,6 +18,21 @@ export default async function DispositiviPage() {
     })
     .all();
 
+  const devicesWithModels = await Promise.all(
+    devices.map(async (device) => {
+      const [model, iosVersion] = await Promise.all([
+        getDeviceModel(device.product),
+        getIOSVersion(device.product, device.version),
+      ]);
+
+      return {
+        ...device,
+        model,
+        iosVersion,
+      };
+    })
+  );
+
   return (
     <main
       className="min-h-screen bg-cover bg-center bg-fixed text-white"
@@ -24,7 +41,6 @@ export default async function DispositiviPage() {
       <Header />
 
       <section className="mx-auto min-h-screen max-w-5xl px-6 pb-16 pt-32">
-
         {/* Intestazione */}
         <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -46,7 +62,7 @@ export default async function DispositiviPage() {
         </div>
 
         {/* Elenco dispositivi */}
-        {devices.length === 0 ? (
+        {devicesWithModels.length === 0 ? (
           <div className="rounded-3xl border border-white/20 bg-white/10 p-10 text-center shadow-2xl backdrop-blur-2xl">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-black/30 text-3xl">
               📱
@@ -69,34 +85,31 @@ export default async function DispositiviPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {devices.map((device) => (
+            {devicesWithModels.map((device) => (
               <Link
                 key={device.id}
                 href={`/dashboard/dispositivi/${device.id}`}
                 className="block rounded-3xl border border-white/20 bg-white/10 p-6 shadow-2xl backdrop-blur-2xl transition hover:bg-white/15"
               >
                 <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-
                   {/* Informazioni dispositivo */}
                   <div className="min-w-0">
                     <div className="flex items-start gap-4">
-
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-black/30 text-2xl">
                         📱
                       </div>
 
                       <div className="min-w-0">
                         <h2 className="text-lg font-semibold">
-                          {device.product || "Dispositivo Apple"}
+                          {device.model}
                         </h2>
 
                         <p className="mt-1 text-sm text-zinc-400">
-                          {device.version
-                            ? `iOS ${device.version}`
+                          {device.iosVersion
+                            ? `iOS ${device.iosVersion}`
                             : "Versione iOS non disponibile"}
                         </p>
                       </div>
-
                     </div>
 
                     {/* UDID */}
@@ -117,7 +130,6 @@ export default async function DispositiviPage() {
                       Gestisci dispositivo →
                     </p>
                   </div>
-
                 </div>
               </Link>
             ))}
@@ -133,7 +145,6 @@ export default async function DispositiviPage() {
             ← Torna alla dashboard
           </Link>
         </div>
-
       </section>
     </main>
   );

@@ -70,3 +70,8 @@ model DeviceRegistration {
 
   user User @relation(fields: [userId], references: [id])
 }
+
+model DeviceModelCache {
+  identifier String @id
+  model      String
+}
