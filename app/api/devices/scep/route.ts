@@ -123,58 +123,94 @@ export async function GET(
      * pubblico della nostra CA.
      */
 
-    if (
-      operation ===
-      "GetCACert"
-    ) {
-      console.log(
-        "SCEP GetCACert"
-      );
+    /*
+ * --------------------------------------------------------
+ * GetCACert
+ * --------------------------------------------------------
+ *
+ * SCEP richiede il certificato pubblico della CA.
+ *
+ * Il certificato viene memorizzato in Vercel
+ * come Base64 DER.
+ * --------------------------------------------------------
+ */
+if (
+  operation ===
+  "GetCACert"
+) {
+  console.log(
+    "SCEP GetCACert"
+  );
 
-      const caCertBase64 =
-        getBase64Env(
-          CA_CERT_BASE64,
-          "ONLYSIGN_CA_CERT_BASE64"
-        );
+  const caCertBase64 =
+    getBase64Env(
+      CA_CERT_BASE64,
+      "ONLYSIGN_CA_CERT_BASE64"
+    );
 
-      const caCertDer =
-        base64ToBytes(
-          caCertBase64
-        );
+  const caCertDer =
+    forge.util.decode64(
+      caCertBase64
+    );
 
-      const caCertBuffer =
-        new Uint8Array(
-          caCertDer.length
-        );
+  /*
+   * Verifichiamo che il Base64
+   * contenga realmente un certificato X.509.
+   */
+  const caCert =
+    forge.pki.certificateFromAsn1(
+      forge.asn1.fromDer(
+        caCertDer
+      )
+    );
 
-      for (
-        let i = 0;
-        i < caCertDer.length;
-        i++
-      ) {
-        caCertBuffer[i] =
-          caCertDer.charCodeAt(i) &
-          0xff;
-      }
+  console.log(
+    "SCEP CA subject:",
+    caCert.subject.attributes
+  );
 
-      return new NextResponse(
-        caCertBuffer,
-        {
-          status: 200,
+  console.log(
+    "SCEP CA issuer:",
+    caCert.issuer.attributes
+  );
 
-          headers: {
-            "Content-Type":
-              "application/x-x509-ca-cert",
+  const caCertBytes =
+    new Uint8Array(
+      caCertDer.length
+    );
 
-            "Content-Length":
-              caCertBuffer.byteLength.toString(),
+  for (
+    let i = 0;
+    i < caCertDer.length;
+    i++
+  ) {
+    caCertBytes[i] =
+      caCertDer.charCodeAt(i) & 0xff;
+  }
 
-            "Cache-Control":
-              "no-store",
-          },
-        }
-      );
+  console.log(
+    "CA certificate size:",
+    caCertBytes.byteLength
+  );
+
+  return new NextResponse(
+    caCertBytes,
+    {
+      status: 200,
+
+      headers: {
+        "Content-Type":
+          "application/x-x509-ca-cert",
+
+        "Content-Length":
+          caCertBytes.byteLength.toString(),
+
+        "Cache-Control":
+          "no-store",
+      },
     }
+  );
+}
 
     /*
      * --------------------------------------------------------
