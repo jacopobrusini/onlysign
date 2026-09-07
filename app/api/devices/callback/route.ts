@@ -399,6 +399,10 @@ export async function POST(
      * ========================================================
      * Verifica firma del dispositivo
      * ========================================================
+     *
+     * La firma deve essere presente e crittograficamente valida.
+     *
+     * Non accettiamo callback privi di firma.
      */
     if (
       response.signature.present !==
@@ -438,7 +442,84 @@ export async function POST(
 
     /*
      * ========================================================
-     * CHALLENGE
+     * CALLBACK SUCCESSIVO AL SCEP
+     * ========================================================
+     *
+     * Dopo aver ottenuto il certificato tramite SCEP,
+     * iOS può inviare nuovamente il Profile Service callback.
+     *
+     * Questo secondo callback:
+     *
+     * - contiene l'UDID
+     * - contiene product/version
+     * - contiene una firma valida
+     * - NON contiene necessariamente il CHALLENGE
+     *
+     * In questo caso il dispositivo è già stato registrato
+     * dal primo callback.
+     *
+     * Non dobbiamo quindi cercare una nuova
+     * DeviceRegistration.
+     */
+    if (
+      response.challenge === undefined ||
+      response.challenge === null
+    ) {
+      console.log(
+        "No challenge in callback."
+      );
+
+      /*
+       * Verifichiamo che l'UDID sia già presente
+       * nel database.
+       */
+      const existingDevice =
+        await db.orm.public.Device
+          .where({
+            udid,
+          })
+          .first();
+
+      if (!existingDevice) {
+        console.error(
+          "Callback without challenge for unknown device:",
+          udid
+        );
+
+        return new NextResponse(
+          "Unknown device.",
+          {
+            status: 403,
+          }
+        );
+      }
+
+      console.log(
+        "Post-SCEP callback accepted:",
+        udid
+      );
+
+      /*
+       * iOS ha completato il proprio ciclo di callback.
+       *
+       * Non dobbiamo creare nuovamente il dispositivo
+       * e non dobbiamo generare un nuovo configuration profile.
+       */
+      return new NextResponse(
+        "OK",
+        {
+          status: 200,
+          headers: {
+            "Cache-Control":
+              "no-store",
+          },
+        }
+      );
+    }
+
+    /*
+     * ========================================================
+     * CHALLENGE DEL PRIMO CALLBACK
      * ========================================================
      */
     let challenge: string;
