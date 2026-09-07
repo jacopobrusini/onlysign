@@ -31,7 +31,7 @@ function createConfigurationProfile(
     `${appUrl}/api/devices/scep`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple Inc//DTD PL 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple Inc//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
 
@@ -133,9 +133,6 @@ function createConfigurationProfile(
  * ============================================================
  * Firma il configuration profile con il certificato contenuto
  * nel PKCS#12.
- *
- * Le credenziali vengono lette esclusivamente dalle variabili
- * d'ambiente server-side.
  * ============================================================
  */
 async function signConfigurationProfile(
@@ -160,25 +157,19 @@ async function signConfigurationProfile(
   }
 
   /*
-   * ----------------------------------------------------------
    * Base64 → DER
-   * ----------------------------------------------------------
    */
   const p12Der =
     forge.util.decode64(p12Base64);
 
   /*
-   * ----------------------------------------------------------
    * DER → ASN.1
-   * ----------------------------------------------------------
    */
   const asn1 =
     forge.asn1.fromDer(p12Der);
 
   /*
-   * ----------------------------------------------------------
    * ASN.1 → PKCS#12
-   * ----------------------------------------------------------
    */
   const p12 =
     forge.pkcs12.pkcs12FromAsn1(
@@ -188,9 +179,7 @@ async function signConfigurationProfile(
     );
 
   /*
-   * ----------------------------------------------------------
    * Recuperiamo la chiave privata.
-   * ----------------------------------------------------------
    */
   const keyBags =
     p12.getBags({
@@ -201,9 +190,7 @@ async function signConfigurationProfile(
     ] ?? [];
 
   /*
-   * ----------------------------------------------------------
    * Recuperiamo i certificati.
-   * ----------------------------------------------------------
    */
   const certBags =
     p12.getBags({
@@ -232,9 +219,7 @@ async function signConfigurationProfile(
   const certificate = certBag.cert;
 
   /*
-   * ----------------------------------------------------------
    * Prepariamo il contenuto da firmare.
-   * ----------------------------------------------------------
    */
   const content =
     forge.util.createBuffer(
@@ -243,9 +228,7 @@ async function signConfigurationProfile(
     );
 
   /*
-   * ----------------------------------------------------------
    * Creiamo CMS / PKCS#7 SignedData.
-   * ----------------------------------------------------------
    */
   const signedData =
     forge.pkcs7.createSignedData();
@@ -260,9 +243,7 @@ async function signConfigurationProfile(
   );
 
   /*
-   * ----------------------------------------------------------
    * Configuriamo la firma RSA + SHA-256.
-   * ----------------------------------------------------------
    */
   signedData.addSigner({
     certificate,
@@ -293,18 +274,14 @@ async function signConfigurationProfile(
   });
 
   /*
-   * ----------------------------------------------------------
    * Firma CMS attached.
-   * ----------------------------------------------------------
    */
   signedData.sign({
     detached: false,
   });
 
   /*
-   * ----------------------------------------------------------
    * CMS ASN.1 → DER.
-   * ----------------------------------------------------------
    */
   const der =
     forge.asn1
@@ -315,19 +292,17 @@ async function signConfigurationProfile(
 
   /*
    * Buffer Node → Uint8Array.
-   *
-   * Uint8Array evita il problema TypeScript:
-   * Buffer<ArrayBufferLike> non assignable to BodyInit.
    */
   const result = new Uint8Array(
-  der.length
-);
+    der.length
+  );
 
-for (let i = 0; i < der.length; i++) {
-  result[i] = der.charCodeAt(i) & 0xff;
-}
+  for (let i = 0; i < der.length; i++) {
+    result[i] =
+      der.charCodeAt(i) & 0xff;
+  }
 
-return result;
+  return result;
 }
 
 /*
@@ -340,9 +315,7 @@ export async function POST(
 ) {
   try {
     /*
-     * ----------------------------------------------------------
      * Riceviamo la risposta PKCS#7 dell'iPhone.
-     * ----------------------------------------------------------
      */
     const body =
       await request.arrayBuffer();
@@ -384,9 +357,7 @@ export async function POST(
       );
 
     /*
-     * ----------------------------------------------------------
-     * Il PKCS#7 non è valido.
-     * ----------------------------------------------------------
+     * PKCS#7 non valido.
      */
     if (!result.ok) {
       console.error(
@@ -637,38 +608,64 @@ export async function POST(
      * ========================================================
      */
     const configuration =
-  createConfigurationProfile(
-    challenge
-  );
+      createConfigurationProfile(
+        challenge
+      );
+
+    /*
+     * ========================================================
+     * DEBUG CONFIGURATION PROFILE
+     * ========================================================
+     */
+    console.log(
+      "=== CONFIGURATION PROFILE ==="
+    );
+
+    console.log(
+      configuration
+    );
+
+    console.log(
+      "=== END CONFIGURATION PROFILE ==="
+    );
+
+    /*
+     * ========================================================
+     * DEBUG SCEP URL
+     * ========================================================
+     */
+    const scepUrl =
+      `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/devices/scep`;
+
+    console.log(
+      "SCEP URL:",
+      scepUrl
+    );
+
+    console.log(
+      "Returning signed configuration to device..."
+    );
 
     /*
      * ========================================================
      * Firmiamo il configuration profile.
      * ========================================================
      */
-    console.log(
-  "=== CONFIGURATION PROFILE ==="
-);
-
-console.log(configuration);
-
-console.log(
-  "=== END CONFIGURATION PROFILE ==="
-);
     const signedConfiguration =
       await signConfigurationProfile(
         configuration
       );
-      console.log(
-  "Signed configuration size:",
-  signedConfiguration.byteLength
-);
+
+    console.log(
+      "Signed configuration size:",
+      signedConfiguration.byteLength
+    );
 
     /*
      * ========================================================
      * Registrazione completata.
      *
-     * Il challenge è one-time, quindi possiamo eliminarlo.
+     * Il challenge è one-time.
      * ========================================================
      */
     await db.orm.public.DeviceRegistration
@@ -682,30 +679,35 @@ console.log(
      * Restituiamo a iOS il CMS / PKCS#7.
      * ========================================================
      */
-    const responseBuffer = new ArrayBuffer(
-  signedConfiguration.byteLength
-);
+    const responseBuffer =
+      new ArrayBuffer(
+        signedConfiguration.byteLength
+      );
 
-new Uint8Array(responseBuffer).set(
-  signedConfiguration
-);
+    new Uint8Array(
+      responseBuffer
+    ).set(
+      signedConfiguration
+    );
 
-return new NextResponse(
-  responseBuffer,
-  {
-    status: 200,
-    headers: {
-      "Content-Type":
-        "application/x-apple-aspen-config",
+    return new NextResponse(
+      responseBuffer,
+      {
+        status: 200,
 
-      "Content-Length":
-        signedConfiguration.byteLength.toString(),
+        headers: {
+          "Content-Type":
+            "application/x-apple-aspen-config",
 
-      "Cache-Control":
-        "no-store",
-    },
-  }
-);
+          "Content-Length":
+            signedConfiguration.byteLength.toString(),
+
+          "Cache-Control":
+            "no-store",
+        },
+      }
+    );
+
   } catch (error) {
     console.error(
       "Device callback error:",
