@@ -34,10 +34,65 @@ function getBase64Env(
   return value.trim();
 }
 
-function base64ToBytes(
-  value: string
-): string {
-  return forge.util.decode64(value);
+/*
+ * ============================================================
+ * Carica il certificato CA.
+ *
+ * La variabile d'ambiente contiene il file
+ * onlysign-ca.crt codificato in Base64.
+ *
+ * Supportiamo sia:
+ *
+ * - Base64 di PEM
+ * - Base64 di DER
+ * ============================================================
+ */
+
+function loadCaCertificate() {
+  const caCertBase64 =
+    getBase64Env(
+      CA_CERT_BASE64,
+      "ONLYSIGN_CA_CERT_BASE64"
+    );
+
+  /*
+   * Base64 → binary
+   */
+  const binary =
+    forge.util.decode64(
+      caCertBase64
+    );
+
+  /*
+   * Proviamo prima come PEM.
+   */
+  const text =
+    forge.util.decodeUtf8(
+      binary
+    );
+
+  if (
+    text.includes(
+      "-----BEGIN CERTIFICATE-----"
+    )
+  ) {
+    return forge.pki.certificateFromPem(
+      text
+    );
+  }
+
+  /*
+   * Altrimenti consideriamo il contenuto
+   * come DER.
+   */
+  const asn1 =
+    forge.asn1.fromDer(
+      binary
+    );
+
+  return forge.pki.certificateFromAsn1(
+    asn1
+  );
 }
 
 /*
@@ -74,9 +129,9 @@ export async function GET(
     );
 
     /*
-     * --------------------------------------------------------
+     * ========================================================
      * GetCACaps
-     * --------------------------------------------------------
+     * ========================================================
      *
      * Comunichiamo al dispositivo
      * quali funzionalità SCEP supportiamo.
@@ -115,107 +170,130 @@ export async function GET(
     }
 
     /*
-     * --------------------------------------------------------
+     * ========================================================
      * GetCACert
-     * --------------------------------------------------------
+     * ========================================================
      *
-     * Restituiamo il certificato
-     * pubblico della nostra CA.
+     * Restituiamo il certificato pubblico
+     * della nostra CA.
      */
 
-    /*
- * --------------------------------------------------------
- * GetCACert
- * --------------------------------------------------------
- *
- * SCEP richiede il certificato pubblico della CA.
- *
- * Il certificato viene memorizzato in Vercel
- * come Base64 DER.
- * --------------------------------------------------------
- */
-if (
-  operation ===
-  "GetCACert"
-) {
-  console.log(
-    "SCEP GetCACert"
-  );
+    if (
+      operation ===
+      "GetCACert"
+    ) {
+      console.log(
+        "SCEP GetCACert"
+      );
 
-  const caCertBase64 =
-    getBase64Env(
-      CA_CERT_BASE64,
-      "ONLYSIGN_CA_CERT_BASE64"
-    );
+      /*
+       * ------------------------------------------------------
+       * Carichiamo il certificato CA.
+       * ------------------------------------------------------
+       */
 
-  const caCertDer =
-    forge.util.decode64(
-      caCertBase64
-    );
+      const caCertificate =
+        loadCaCertificate();
 
-  /*
-   * Verifichiamo che il Base64
-   * contenga realmente un certificato X.509.
-   */
-  const caCert =
-    forge.pki.certificateFromAsn1(
-      forge.asn1.fromDer(
-        caCertDer
-      )
-    );
+      /*
+       * ------------------------------------------------------
+       * Debug certificato.
+       * ------------------------------------------------------
+       */
 
-  console.log(
-    "SCEP CA subject:",
-    caCert.subject.attributes
-  );
+      console.log(
+        "SCEP CA subject:",
+        caCertificate.subject.attributes
+      );
 
-  console.log(
-    "SCEP CA issuer:",
-    caCert.issuer.attributes
-  );
+      console.log(
+        "SCEP CA issuer:",
+        caCertificate.issuer.attributes
+      );
 
-  const caCertBytes =
-    new Uint8Array(
-      caCertDer.length
-    );
+      console.log(
+        "SCEP CA serial:",
+        caCertificate.serialNumber
+      );
 
-  for (
-    let i = 0;
-    i < caCertDer.length;
-    i++
-  ) {
-    caCertBytes[i] =
-      caCertDer.charCodeAt(i) & 0xff;
-  }
+      /*
+       * ------------------------------------------------------
+       * X.509 → ASN.1 → DER
+       * ------------------------------------------------------
+       *
+       * Ricostruiamo il DER direttamente dal
+       * certificato X.509, invece di restituire
+       * semplicemente il contenuto della variabile.
+       * ------------------------------------------------------
+       */
 
-  console.log(
-    "CA certificate size:",
-    caCertBytes.byteLength
-  );
+      const caAsn1 =
+        forge.pki.certificateToAsn1(
+          caCertificate
+        );
 
-  return new NextResponse(
-    caCertBytes,
-    {
-      status: 200,
+      const caDer =
+        forge.asn1
+          .toDer(
+            caAsn1
+          )
+          .getBytes();
 
-      headers: {
-        "Content-Type":
-          "application/x-x509-ca-cert",
+      /*
+       * ------------------------------------------------------
+       * DER → Uint8Array
+       * ------------------------------------------------------
+       */
 
-        "Content-Length":
-          caCertBytes.byteLength.toString(),
+      const caBytes =
+        new Uint8Array(
+          caDer.length
+        );
 
-        "Cache-Control":
-          "no-store",
-      },
+      for (
+        let i = 0;
+        i < caDer.length;
+        i++
+      ) {
+        caBytes[i] =
+          caDer.charCodeAt(i) &
+          0xff;
+      }
+
+      console.log(
+        "CA certificate size:",
+        caBytes.byteLength
+      );
+
+      /*
+       * ------------------------------------------------------
+       * Risposta SCEP GetCACert.
+       * ------------------------------------------------------
+       */
+
+      return new NextResponse(
+        caBytes,
+        {
+          status: 200,
+
+          headers: {
+            "Content-Type":
+              "application/x-x509-ca-cert",
+
+            "Content-Length":
+              caBytes.byteLength.toString(),
+
+            "Cache-Control":
+              "no-store",
+          },
+        }
+      );
     }
-  );
-}
 
     /*
-     * --------------------------------------------------------
+     * ========================================================
      * Operazione SCEP non supportata.
-     * --------------------------------------------------------
+     * ========================================================
      */
 
     return new NextResponse(
@@ -244,10 +322,8 @@ if (
  * ============================================================
  * POST /api/devices/scep
  *
- * Qui arriverà PKIOperation.
- *
- * Per ora registriamo la richiesta e
- * restituiamo un errore esplicito.
+ * PKIOperation verrà implementato
+ * nel prossimo step.
  * ============================================================
  */
 
@@ -295,6 +371,8 @@ export async function POST(
      * --------------------------------------------------------
      * PKIOperation
      * --------------------------------------------------------
+     *
+     * NON implementato ancora.
      */
 
     if (
@@ -305,30 +383,10 @@ export async function POST(
         "=== SCEP PKIOperation ==="
       );
 
-      /*
-       * DEBUG:
-       * mostriamo soltanto la dimensione.
-       *
-       * NON stampiamo il contenuto
-       * PKCS#7 nei log.
-       */
-
       console.log(
         "PKIOperation payload size:",
         body.byteLength
       );
-
-      /*
-       * TODO:
-       *
-       * 1. Parse PKCS#7
-       * 2. Decrypt envelopedData
-       * 3. Extract CSR
-       * 4. Verify SCEP challenge
-       * 5. Issue device certificate
-       * 6. Build SCEP CertRep
-       * 7. Return PKCS#7
-       */
 
       return new NextResponse(
         "PKIOperation not implemented yet.",
