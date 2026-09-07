@@ -83,10 +83,10 @@ function createConfigurationProfile(challenge: string) {
 <string>it.onlysign.device-registration</string>
 
 <key>PayloadDisplayName</key>
-<string>onlySign - Registrazione dispositivo</string>
+<string>onlySign — Registrazione dispositivo</string>
 
 <key>PayloadDescription</key>
-<string>Registrazione del dispositivo su onlySign.</string>
+<string>Questo profilo è necessario per completare la registrazione del tuo dispositivo su onlySign. Viene utilizzato durante la procedura per verificare l'identità del dispositivo e associarlo al tuo account. Il profilo non consente a onlySign di accedere ai tuoi dati personali, alle tue foto o ai tuoi contenuti.</string>
 
 <key>PayloadOrganization</key>
 <string>onlySign</string>
@@ -136,7 +136,7 @@ function createConfigurationProfile(challenge: string) {
         </dict>
 
         <key>PayloadDescription</key>
-        <string>Provides onlySign device identity</string>
+        <string>Identità temporanea utilizzata da onlySign per verificare e registrare in modo sicuro questo dispositivo.</string>
 
         <key>PayloadUUID</key>
         <string>${scepUUID}</string>
@@ -145,7 +145,7 @@ function createConfigurationProfile(challenge: string) {
         <string>com.apple.security.scep</string>
 
         <key>PayloadDisplayName</key>
-        <string>onlySign Device Identity</string>
+        <string>onlySign — Identità temporanea del dispositivo</string>
 
         <key>PayloadVersion</key>
         <integer>1</integer>
@@ -392,9 +392,7 @@ function extractSignerCertificate(
  * Il certificato SCEP è già stato installato durante la fase
  * precedente.
  *
- * Per il primo test della fase OTA finale inseriamo un Web Clip
- * innocuo che permette di verificare che il profilo cifrato
- * venga realmente decrittato e installato da iOS.
+ * Il payload finale serve a completare la procedura OTA.
  * ============================================================
  */
 
@@ -546,10 +544,10 @@ function createFinalConfigurationProfile(
       "it.onlysign.final",
 
     PayloadDisplayName:
-      "onlySign",
+      "onlySign — Completamento registrazione",
 
     PayloadDescription:
-      "Configurazione finale onlySign del dispositivo.",
+      "Completamento della registrazione del dispositivo su onlySign.",
 
     PayloadOrganization:
       "onlySign",
@@ -1035,11 +1033,11 @@ export async function POST(
           .delete();
 
         return new NextResponse(
-          "Device already registered to another account.",
-          {
-            status: 409,
-          }
-        );
+  "Dispositivo già registrato.",
+  {
+    status: 409,
+  }
+);
       }
 
       console.log(
