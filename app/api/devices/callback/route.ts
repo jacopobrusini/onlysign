@@ -22,10 +22,11 @@ function createConfigurationProfile() {
     process.env.NEXT_PUBLIC_APP_URL ??
     "http://localhost:3000";
 
-  const scepUrl = `${appUrl}/api/devices/scep`;
+  const scepUrl =
+    `${appUrl}/api/devices/scep`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple Inc//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
 
@@ -55,39 +56,6 @@ function createConfigurationProfile() {
 
         <dict>
 
-              <key>URL</key>
-    <string>${scepUrl}</string>
-
-    <key>Key Type</key>
-    <string>RSA</string>
-
-    <key>Keysize</key>
-    <integer>2048</integer>
-
-    <key>Key Usage</key>
-    <integer>5</integer>
-
-            <key>PayloadVersion</key>
-            <integer>1</integer>
-
-            <key>PayloadUUID</key>
-            <string>${scepUUID}</string>
-
-            <key>PayloadType</key>
-            <string>com.apple.security.scep</string>
-
-            <key>PayloadIdentifier</key>
-            <string>it.onlysign.scep</string>
-
-            <key>PayloadDisplayName</key>
-            <string>onlySign Device Identity</string>
-
-            <key>PayloadDescription</key>
-            <string>Identità del dispositivo onlySign.</string>
-
-            <key>PayloadOrganization</key>
-            <string>onlySign</string>
-
             <key>PayloadContent</key>
             <dict>
 
@@ -100,7 +68,31 @@ function createConfigurationProfile() {
                 <key>Key Usage</key>
                 <integer>5</integer>
 
+                <key>Keysize</key>
+                <integer>2048</integer>
+
             </dict>
+
+            <key>PayloadDescription</key>
+            <string>Provides onlySign device identity.</string>
+
+            <key>PayloadUUID</key>
+            <string>${scepUUID}</string>
+
+            <key>PayloadType</key>
+            <string>com.apple.security.scep</string>
+
+            <key>PayloadDisplayName</key>
+            <string>onlySign Device Identity</string>
+
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+
+            <key>PayloadOrganization</key>
+            <string>onlySign</string>
+
+            <key>PayloadIdentifier</key>
+            <string>it.onlysign.scep</string>
 
         </dict>
 
