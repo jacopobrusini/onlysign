@@ -984,22 +984,6 @@ export async function POST(
 
     /*
      * ========================================================
-     * Nome dispositivo.
-     * ========================================================
-     */
-
-    const rawDeviceName =
-      response.raw["DEVICE_NAME"];
-
-    const deviceName =
-      typeof rawDeviceName ===
-      "string"
-        ? rawDeviceName.trim() ||
-          null
-        : null;
-
-    /*
-     * ========================================================
      * Controlliamo se l'UDID è già registrato.
      *
      * Se è dello stesso account, NON lo aggiorniamo.
@@ -1059,26 +1043,12 @@ export async function POST(
        */
 
       await db.orm.public.Device.create({
-        userId:
-          registration.userId,
-
-        udid,
-
-        name:
-          deviceName,
-
-        model:
-          response.attributes.product?.trim() ||
-          null,
-
-        product:
-          response.attributes.product?.trim() ||
-          null,
-
-        osVersion:
-          response.attributes.version?.trim() ||
-          null,
-      });
+  userId: registration.userId,
+  udid,
+  model: response.attributes.product?.trim() || null,
+  product: response.attributes.product?.trim() || null,
+  osVersion: response.attributes.version?.trim() || null,
+});
 
       console.log(
         "Device registered successfully:",
