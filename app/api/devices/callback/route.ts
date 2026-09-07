@@ -55,6 +55,18 @@ function createConfigurationProfile() {
 
         <dict>
 
+              <key>URL</key>
+    <string>${scepUrl}</string>
+
+    <key>Key Type</key>
+    <string>RSA</string>
+
+    <key>Keysize</key>
+    <integer>2048</integer>
+
+    <key>Key Usage</key>
+    <integer>5</integer>
+
             <key>PayloadVersion</key>
             <integer>1</integer>
 
