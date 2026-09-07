@@ -707,11 +707,7 @@ function attributeBinary(
 function findEncryptedContent(
   signedData: forge.asn1.Asn1
 ): string {
-  if (
-    !isAsn1Array(
-      signedData.value
-    )
-  ) {
+  if (!isAsn1Array(signedData.value)) {
     throw new Error(
       "SCEP: SignedData non valido."
     );
@@ -719,27 +715,11 @@ function findEncryptedContent(
 
   const contentInfo =
     signedData.value[2];
-    console.log(
-  "=== SCEP CONTENT INFO ASN1 ==="
-);
-
-console.dir(
-  contentInfo,
-  {
-    depth: 8
-  }
-);
-
-console.log(
-  "=== END SCEP CONTENT INFO ASN1 ==="
-);
 
   if (
     !contentInfo ||
     !isAsn1(contentInfo) ||
-    !isAsn1Array(
-      contentInfo.value
-    )
+    !isAsn1Array(contentInfo.value)
   ) {
     throw new Error(
       "SCEP: ContentInfo non trovato."
@@ -752,9 +732,7 @@ console.log(
   if (
     !wrapper ||
     !isAsn1(wrapper) ||
-    !isAsn1Array(
-      wrapper.value
-    )
+    !isAsn1Array(wrapper.value)
   ) {
     throw new Error(
       "SCEP: eContent wrapper mancante."
@@ -773,18 +751,55 @@ console.log(
     );
   }
 
+  /*
+   * SCEP/iOS può rappresentare l'eContent
+   * come constructed OCTET STRING contenente
+   * uno o più OCTET STRING primitivi.
+   */
+
   if (
     content.type !==
-      forge.asn1.Type.OCTETSTRING ||
-    typeof content.value !==
-      "string"
+    forge.asn1.Type.OCTETSTRING
   ) {
     throw new Error(
       "SCEP: eContent non è OCTET STRING."
     );
   }
 
-  return content.value;
+  if (
+    typeof content.value === "string"
+  ) {
+    return content.value;
+  }
+
+  if (
+    !Array.isArray(content.value)
+  ) {
+    throw new Error(
+      "SCEP: eContent OCTET STRING non valido."
+    );
+  }
+
+  let result = "";
+
+  for (
+    const chunk of content.value
+  ) {
+    if (
+      !isAsn1(chunk) ||
+      chunk.type !==
+        forge.asn1.Type.OCTETSTRING ||
+      typeof chunk.value !== "string"
+    ) {
+      throw new Error(
+        "SCEP: segmento OCTET STRING non valido."
+      );
+    }
+
+    result += chunk.value;
+  }
+
+  return result;
 }
 
 /*
