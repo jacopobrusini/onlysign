@@ -86,7 +86,6 @@ model Device {
   id          Int      @id @default(autoincrement())
   userId      Int
   udid        String   @unique
-  name        String?
   model       String?
   product     String?
   osVersion   String?

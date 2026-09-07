@@ -137,13 +137,6 @@
                   "kind": "scalar"
                 }
               },
-              "name": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
               "osVersion": {
                 "nullable": true,
                 "type": {
@@ -207,9 +200,6 @@
                 },
                 "model": {
                   "column": "model"
-                },
-                "name": {
-                  "column": "name"
                 },
                 "osVersion": {
                   "column": "osVersion"
@@ -832,11 +822,6 @@
                   "nativeType": "text",
                   "nullable": true
                 },
-                "name": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": true
-                },
                 "osVersion": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -1293,7 +1278,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "0a1d2887a55ce69bdfc1170a6c8529fb9dd93c7ad52b28951bdbf5c84c9de6e7"
+    "storageHash": "d3309a2b0384e097067a3658b4dbeb456a5c7238bbdee798effa9e9398466e3c"
   },
   "execution": {
     "executionHash": "53be9019a4809a794dd5bad9bff3785f00c81abc36298f89a908c023b6e3fea2",
