@@ -16,36 +16,83 @@ export const runtime = "nodejs";
  */
 function createConfigurationProfile() {
   const payloadUUID = randomUUID().toUpperCase();
+  const scepUUID = randomUUID().toUpperCase();
+
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "http://localhost:3000";
+
+  const scepUrl = `${appUrl}/api/devices/scep`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
 
-    <key>PayloadContent</key>
-    <array>
-    </array>
-
-    <key>PayloadDisplayName</key>
-    <string>onlySign</string>
-
-    <key>PayloadDescription</key>
-    <string>Registrazione dispositivo onlySign completata.</string>
-
-    <key>PayloadIdentifier</key>
-    <string>it.onlysign.device-registration</string>
-
-    <key>PayloadOrganization</key>
-    <string>onlySign</string>
-
-    <key>PayloadType</key>
-    <string>Configuration</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
 
     <key>PayloadUUID</key>
     <string>${payloadUUID}</string>
 
-    <key>PayloadVersion</key>
-    <integer>1</integer>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+
+    <key>PayloadIdentifier</key>
+    <string>it.onlysign.device-registration</string>
+
+    <key>PayloadDisplayName</key>
+    <string>onlySign - Registrazione dispositivo</string>
+
+    <key>PayloadDescription</key>
+    <string>Registrazione del dispositivo su onlySign.</string>
+
+    <key>PayloadOrganization</key>
+    <string>onlySign</string>
+
+    <key>PayloadContent</key>
+    <array>
+
+        <dict>
+
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+
+            <key>PayloadUUID</key>
+            <string>${scepUUID}</string>
+
+            <key>PayloadType</key>
+            <string>com.apple.security.scep</string>
+
+            <key>PayloadIdentifier</key>
+            <string>it.onlysign.scep</string>
+
+            <key>PayloadDisplayName</key>
+            <string>onlySign Device Identity</string>
+
+            <key>PayloadDescription</key>
+            <string>Identità del dispositivo onlySign.</string>
+
+            <key>PayloadOrganization</key>
+            <string>onlySign</string>
+
+            <key>PayloadContent</key>
+            <dict>
+
+                <key>URL</key>
+                <string>${scepUrl}</string>
+
+                <key>Key Type</key>
+                <string>RSA</string>
+
+                <key>Key Usage</key>
+                <integer>5</integer>
+
+            </dict>
+
+        </dict>
+
+    </array>
 
 </dict>
 </plist>`;
@@ -566,6 +613,15 @@ export async function POST(
      * Firmiamo il configuration profile.
      * ========================================================
      */
+    console.log(
+  "=== CONFIGURATION PROFILE ==="
+);
+
+console.log(configuration);
+
+console.log(
+  "=== END CONFIGURATION PROFILE ==="
+);
     const signedConfiguration =
       await signConfigurationProfile(
         configuration
