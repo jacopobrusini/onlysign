@@ -14,9 +14,14 @@ export const runtime = "nodejs";
  * all'iPhone dopo la registrazione.
  * ============================================================
  */
-function createConfigurationProfile() {
-  const payloadUUID = randomUUID().toUpperCase();
-  const scepUUID = randomUUID().toUpperCase();
+function createConfigurationProfile(
+  challenge: string
+) {
+  const payloadUUID =
+    randomUUID().toUpperCase();
+
+  const scepUUID =
+    randomUUID().toUpperCase();
 
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
@@ -26,7 +31,7 @@ function createConfigurationProfile() {
     `${appUrl}/api/devices/scep`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple Inc//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple Inc//DTD PL 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
 
@@ -62,19 +67,41 @@ function createConfigurationProfile() {
                 <key>URL</key>
                 <string>${scepUrl}</string>
 
+                <key>Name</key>
+                <string>onlySignDevice</string>
+
+                <key>Subject</key>
+                <array>
+                    <array>
+                        <array>
+                            <string>O</string>
+                            <string>onlySign</string>
+                        </array>
+                    </array>
+                    <array>
+                        <array>
+                            <string>CN</string>
+                            <string>onlySign Device</string>
+                        </array>
+                    </array>
+                </array>
+
+                <key>Challenge</key>
+                <string>${challenge}</string>
+
+                <key>Keysize</key>
+                <integer>2048</integer>
+
                 <key>Key Type</key>
                 <string>RSA</string>
 
                 <key>Key Usage</key>
                 <integer>5</integer>
 
-                <key>Keysize</key>
-                <integer>2048</integer>
-
             </dict>
 
             <key>PayloadDescription</key>
-            <string>Provides onlySign device identity.</string>
+            <string>Provides onlySign device identity</string>
 
             <key>PayloadUUID</key>
             <string>${scepUUID}</string>
@@ -610,7 +637,9 @@ export async function POST(
      * ========================================================
      */
     const configuration =
-      createConfigurationProfile();
+  createConfigurationProfile(
+    challenge
+  );
 
     /*
      * ========================================================
