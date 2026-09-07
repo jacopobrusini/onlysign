@@ -570,6 +570,10 @@ export async function POST(
       await signConfigurationProfile(
         configuration
       );
+      console.log(
+  "Signed configuration size:",
+  signedConfiguration.byteLength
+);
 
     /*
      * ========================================================
