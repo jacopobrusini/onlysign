@@ -1,3 +1,5 @@
+import { db } from "@/prisma/db";
+
 type IPSWFirmwareResponse = {
   identifier?: string;
   version?: string;
@@ -5,21 +7,36 @@ type IPSWFirmwareResponse = {
 };
 
 export async function getIOSVersion(
-  identifier: string,
-  buildId: string
+  product: string,
+  build: string
 ) {
-  const normalizedIdentifier = identifier.trim();
-  const normalizedBuildId = buildId.trim();
+  const normalizedProduct = product.trim();
+  const normalizedBuild = build.trim();
 
-  if (!normalizedIdentifier || !normalizedBuildId) {
-    return normalizedBuildId || "Versione iOS non disponibile";
+  if (!normalizedProduct || !normalizedBuild) {
+    return "Versione iOS non disponibile";
+  }
+
+  // Controlla la cache
+  const cached = await db.orm.public.DeviceModelCache
+    .where({
+      product: normalizedProduct,
+    })
+    .first();
+
+  if (
+    cached &&
+    cached.build === normalizedBuild &&
+    cached.version
+  ) {
+    return cached.version;
   }
 
   try {
     const response = await fetch(
       `https://api.ipsw.me/v4/ipsw/${encodeURIComponent(
-        normalizedIdentifier
-      )}/${encodeURIComponent(normalizedBuildId)}`,
+        normalizedProduct
+      )}/${encodeURIComponent(normalizedBuild)}`,
       {
         next: {
           revalidate: 86400,
@@ -33,12 +50,12 @@ export async function getIOSVersion(
         response.status,
         response.statusText,
         {
-          identifier: normalizedIdentifier,
-          buildId: normalizedBuildId,
+          product: normalizedProduct,
+          build: normalizedBuild,
         }
       );
 
-      return normalizedBuildId;
+      return "Versione iOS non disponibile";
     }
 
     const data =
@@ -50,13 +67,30 @@ export async function getIOSVersion(
       console.error(
         "IPSW Downloads iOS version not found:",
         {
-          identifier: normalizedIdentifier,
-          buildId: normalizedBuildId,
+          product: normalizedProduct,
+          build: normalizedBuild,
         }
       );
 
-      return normalizedBuildId;
+      return "Versione iOS non disponibile";
     }
+
+    // Aggiorna la cache
+    await db.orm.public.DeviceModelCache.upsert({
+      conflictOn: {
+        product: normalizedProduct,
+      },
+      update: {
+        version,
+        build: normalizedBuild,
+      },
+      create: {
+        product: normalizedProduct,
+        model: "Dispositivo Apple",
+        version,
+        build: normalizedBuild,
+      },
+    });
 
     return version;
   } catch (error) {
@@ -65,6 +99,6 @@ export async function getIOSVersion(
       error
     );
 
-    return normalizedBuildId;
+    return "Versione iOS non disponibile";
   }
 }

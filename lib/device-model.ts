@@ -1,19 +1,32 @@
+import { db } from "@/prisma/db";
+
 type IPSWDeviceResponse = {
   identifier?: string;
   name?: string;
 };
 
-export async function getDeviceModel(identifier: string) {
-  const normalizedIdentifier = identifier.trim();
+export async function getDeviceModel(product: string) {
+  const normalizedProduct = product.trim();
 
-  if (!normalizedIdentifier) {
+  if (!normalizedProduct) {
     return "Dispositivo Apple";
+  }
+
+  // Controlla la cache
+  const cached = await db.orm.public.DeviceModelCache
+    .where({
+      product: normalizedProduct,
+    })
+    .first();
+
+  if (cached?.model && cached.model !== "Dispositivo Apple") {
+    return cached.model;
   }
 
   try {
     const response = await fetch(
       `https://api.ipsw.me/v4/device/${encodeURIComponent(
-        normalizedIdentifier
+        normalizedProduct
       )}`,
       {
         next: {
@@ -40,11 +53,27 @@ export async function getDeviceModel(identifier: string) {
     if (!model) {
       console.error(
         "IPSW Downloads device name not found:",
-        normalizedIdentifier
+        normalizedProduct
       );
 
       return "Dispositivo Apple";
     }
+
+    // Aggiorna la cache
+    await db.orm.public.DeviceModelCache.upsert({
+      where: {
+        product: normalizedProduct,
+      },
+      update: {
+        model,
+      },
+      create: {
+        product: normalizedProduct,
+        model,
+        build: "",
+        version: "",
+      },
+    });
 
     return model;
   } catch (error) {
