@@ -194,14 +194,14 @@
                   "kind": "scalar"
                 }
               },
-              "identifier": {
+              "model": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
-              "model": {
+              "product": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
@@ -222,11 +222,11 @@
                 "build": {
                   "column": "build"
                 },
-                "identifier": {
-                  "column": "identifier"
-                },
                 "model": {
                   "column": "model"
+                },
+                "product": {
+                  "column": "product"
                 },
                 "version": {
                   "column": "version"
@@ -823,12 +823,12 @@
                   "nativeType": "text",
                   "nullable": false
                 },
-                "identifier": {
+                "model": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
-                "model": {
+                "product": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
@@ -843,7 +843,7 @@
               "indexes": [],
               "primaryKey": {
                 "columns": [
-                  "identifier"
+                  "product"
                 ]
               },
               "uniques": []
@@ -1187,7 +1187,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "29777093133c7b1522e7f89f02650f4b1f4cbcecc0f84eeb26c0df6922d8dcf0"
+    "storageHash": "6e2dcf4bbea183f8a94ddaf2f9cc81c37bd59f9c9764bd4c9e3ad3ba72591424"
   },
   "capabilities": {
     "postgres": {

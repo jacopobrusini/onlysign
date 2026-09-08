@@ -72,8 +72,8 @@ model DeviceRegistration {
 }
 
 model DeviceModelCache {
-  identifier String @id
-  model      String
-  version String
-  build   String
+  product  String @id
+  model    String
+  build    String
+  version  String
 }
