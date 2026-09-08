@@ -1061,7 +1061,7 @@ await db.orm.public.Device.create({
   userId: registration.userId,
   udid,
   product,
-  version,
+  build: version,
 });
 
       console.log(

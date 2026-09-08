@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'29777093133c7b1522e7f89f02650f4b1f4cbcecc0f84eeb26c0df6922d8dcf0'>;
+  StorageHashBase<'3dee2d2698a03b383be16ab2d55d95de1ef5bd5afb0023d80a987ce920e7e4b0'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -256,8 +256,6 @@ export type FieldOutputTypes = {
     readonly DeviceModelCache: {
       readonly identifier: CodecTypes['pg/text@1']['output'];
       readonly model: CodecTypes['pg/text@1']['output'];
-      readonly version: CodecTypes['pg/text@1']['output'];
-      readonly build: CodecTypes['pg/text@1']['output'];
     };
     readonly DeviceRegistration: {
       readonly id: CodecTypes['pg/int4@1']['output'];
@@ -311,8 +309,6 @@ export type FieldInputTypes = {
     readonly DeviceModelCache: {
       readonly identifier: CodecTypes['pg/text@1']['input'];
       readonly model: CodecTypes['pg/text@1']['input'];
-      readonly version: CodecTypes['pg/text@1']['input'];
-      readonly build: CodecTypes['pg/text@1']['input'];
     };
     readonly DeviceRegistration: {
       readonly id: CodecTypes['pg/int4@1']['input'];
@@ -364,10 +360,8 @@ export type StorageColumnTypes = {
       readonly userId: CodecTypes['pg/int4@1']['output'];
     };
     readonly deviceModelCache: {
-      readonly build: CodecTypes['pg/text@1']['output'];
       readonly identifier: CodecTypes['pg/text@1']['output'];
       readonly model: CodecTypes['pg/text@1']['output'];
-      readonly version: CodecTypes['pg/text@1']['output'];
     };
     readonly deviceRegistration: {
       readonly expiresAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -419,10 +413,8 @@ export type StorageColumnInputTypes = {
       readonly userId: CodecTypes['pg/int4@1']['input'];
     };
     readonly deviceModelCache: {
-      readonly build: CodecTypes['pg/text@1']['input'];
       readonly identifier: CodecTypes['pg/text@1']['input'];
       readonly model: CodecTypes['pg/text@1']['input'];
-      readonly version: CodecTypes['pg/text@1']['input'];
     };
     readonly deviceRegistration: {
       readonly expiresAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
@@ -593,16 +585,6 @@ type ContractBase = Omit<
                   readonly nullable: false;
                 };
                 readonly model: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly version: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly build: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
@@ -1007,14 +989,6 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
-              readonly version: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly build: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
             };
             readonly relations: Record<string, never>;
             readonly storage: {
@@ -1023,8 +997,6 @@ type ContractBase = Omit<
               readonly fields: {
                 readonly identifier: { readonly column: 'identifier' };
                 readonly model: { readonly column: 'model' };
-                readonly version: { readonly column: 'version' };
-                readonly build: { readonly column: 'build' };
               };
             };
           };

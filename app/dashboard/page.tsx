@@ -24,7 +24,7 @@ export default async function Dashboard() {
     devices.map(async (device) => {
       const [model, iosVersion] = await Promise.all([
         getDeviceModel(device.product),
-        getIOSVersion(device.product, device.version),
+        getIOSVersion(device.product, device.build),
       ]);
 
       return {

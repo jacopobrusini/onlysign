@@ -41,7 +41,7 @@ export default async function DevicePage({
 
   const [deviceName, iosVersion] = await Promise.all([
     getDeviceModel(device.product),
-    getIOSVersion(device.product, device.version),
+    getIOSVersion(device.product, device.build),
   ]);
 
   return (

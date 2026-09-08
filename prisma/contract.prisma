@@ -57,7 +57,7 @@ model Device {
   userId    Int
   udid      String   @unique
   product   String
-  version   String
+  build   String
 
   user User @relation(fields: [userId], references: [id])
 }
@@ -74,4 +74,6 @@ model DeviceRegistration {
 model DeviceModelCache {
   identifier String @id
   model      String
+  version String
+  build   String
 }

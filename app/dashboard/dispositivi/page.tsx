@@ -22,7 +22,7 @@ export default async function DispositiviPage() {
     devices.map(async (device) => {
       const [model, iosVersion] = await Promise.all([
         getDeviceModel(device.product),
-        getIOSVersion(device.product, device.version),
+        getIOSVersion(device.product, device.build),
       ]);
 
       return {

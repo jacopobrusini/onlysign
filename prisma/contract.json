@@ -110,6 +110,13 @@
           },
           "Device": {
             "fields": {
+              "build": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -137,13 +144,6 @@
                   "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
-              },
-              "version": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
               }
             },
             "relations": {
@@ -165,6 +165,9 @@
             },
             "storage": {
               "fields": {
+                "build": {
+                  "column": "build"
+                },
                 "id": {
                   "column": "id"
                 },
@@ -176,9 +179,6 @@
                 },
                 "userId": {
                   "column": "userId"
-                },
-                "version": {
-                  "column": "version"
                 }
               },
               "namespaceId": "public",
@@ -187,6 +187,13 @@
           },
           "DeviceModelCache": {
             "fields": {
+              "build": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "identifier": {
                 "nullable": false,
                 "type": {
@@ -200,16 +207,29 @@
                   "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
+              },
+              "version": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
               }
             },
             "relations": {},
             "storage": {
               "fields": {
+                "build": {
+                  "column": "build"
+                },
                 "identifier": {
                   "column": "identifier"
                 },
                 "model": {
                   "column": "model"
+                },
+                "version": {
+                  "column": "version"
                 }
               },
               "namespaceId": "public",
@@ -725,6 +745,11 @@
             },
             "device": {
               "columns": {
+                "build": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
                 "id": {
                   "codecId": "pg/int4@1",
                   "default": {
@@ -747,11 +772,6 @@
                 "userId": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
-                  "nullable": false
-                },
-                "version": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
                   "nullable": false
                 }
               },
@@ -798,12 +818,22 @@
             },
             "deviceModelCache": {
               "columns": {
+                "build": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
                 "identifier": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
                 "model": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "version": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
@@ -1157,7 +1187,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "9bff0f66d5086f0da6938589f3523d3614696870f42a06457c6ad00dfb17323c"
+    "storageHash": "29777093133c7b1522e7f89f02650f4b1f4cbcecc0f84eeb26c0df6922d8dcf0"
   },
   "capabilities": {
     "postgres": {
