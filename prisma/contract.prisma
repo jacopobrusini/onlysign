@@ -151,6 +151,11 @@ model TokenPurchase {
   ppqcheckTransaction PpqcheckTransaction?
 }
 
+model PaymosWebhookEvent {
+  id        Int    @id @default(autoincrement())
+  eventId   String @unique
+  eventType String
+}
 
 // ─────────────────────────────────────────────
 // TOKEN TRANSACTIONS

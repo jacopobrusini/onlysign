@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { db } from "@/prisma/db";
+
+type PaymosWebhookPayload = {
+  event_id?: string;
+  event_type?: string;
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +26,9 @@ export async function POST(request: NextRequest) {
     const webhookSecret = process.env.PAYMOS_WEBHOOK_SECRET;
 
     if (!webhookSecret) {
-      console.error("Paymos webhook: PAYMOS_WEBHOOK_SECRET is not configured");
+      console.error(
+        "Paymos webhook: PAYMOS_WEBHOOK_SECRET is not configured"
+      );
 
       return NextResponse.json(
         { error: "Webhook secret not configured" },
@@ -39,7 +47,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Reject webhooks older/newer than 5 minutes.
     const now = Math.floor(Date.now() / 1000);
 
     if (Math.abs(now - timestamp) > 300) {
@@ -58,8 +65,6 @@ export async function POST(request: NextRequest) {
       .update(signaturePayload)
       .digest("hex");
 
-    // Paymos may temporarily provide multiple v1 signatures during
-    // webhook secret rotation.
     const signatures = signatureHeader
       .split(",")
       .map((part) => part.trim())
@@ -90,10 +95,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let payload: any;
+    let payload: PaymosWebhookPayload;
 
     try {
-      payload = JSON.parse(rawBody);
+      payload = JSON.parse(rawBody) as PaymosWebhookPayload;
     } catch {
       console.error("Paymos webhook: invalid JSON");
 
@@ -103,8 +108,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const eventId = payload?.event_id;
-    const eventType = payload?.event_type;
+    const eventId = payload.event_id;
+    const eventType = payload.event_type;
 
     if (!eventId || !eventType) {
       console.error("Paymos webhook: missing event data");
@@ -115,28 +120,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const existingEvent = await db.orm.public.PaymosWebhookEvent
+      .where({
+        eventId,
+      })
+      .first();
+
+    if (existingEvent) {
+      console.log("Paymos webhook: duplicate event ignored");
+      console.log("Event ID:", eventId);
+      console.log("Event type:", eventType);
+
+      return NextResponse.json({
+        received: true,
+        verified: true,
+        duplicate: true,
+      });
+    }
+
+    try {
+      await db.orm.public.PaymosWebhookEvent.create({
+        eventId,
+        eventType,
+      });
+    } catch (error) {
+      const duplicateEvent = await db.orm.public.PaymosWebhookEvent
+        .where({
+          eventId,
+        })
+        .first();
+
+      if (duplicateEvent) {
+        console.log(
+          "Paymos webhook: duplicate event detected by database"
+        );
+
+        return NextResponse.json({
+          received: true,
+          verified: true,
+          duplicate: true,
+        });
+      }
+
+      throw error;
+    }
+
     console.log("=== PAYMOS WEBHOOK VERIFIED ===");
     console.log("Event ID:", eventId);
     console.log("Event type:", eventType);
     console.log("Timestamp:", timestamp);
     console.log("Signature: VALID");
+    console.log("Idempotency: NEW EVENT");
     console.log("Payload:", payload);
-
-    // TESTING ONLY:
-    // We currently do not modify the database or credit tokens.
-    //
-    // Later:
-    // - verify event idempotency
-    // - find TokenPurchase using external/payment ID
-    // - verify invoice status
-    // - mark purchase as PAID
-    // - credit tokens
-    // - create TokenTransaction
-    // - handle refunds/failures safely
 
     return NextResponse.json({
       received: true,
       verified: true,
+      duplicate: false,
     });
   } catch (error) {
     console.error("Paymos webhook error:", error);

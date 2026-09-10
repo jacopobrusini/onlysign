@@ -36,6 +36,10 @@
       "model": "PasswordChangeToken",
       "namespace": "public"
     },
+    "paymosWebhookEvent": {
+      "model": "PaymosWebhookEvent",
+      "namespace": "public"
+    },
     "ppqcheckTransaction": {
       "model": "PpqcheckTransaction",
       "namespace": "public"
@@ -840,6 +844,47 @@
               },
               "namespaceId": "public",
               "table": "passwordChangeToken"
+            }
+          },
+          "PaymosWebhookEvent": {
+            "fields": {
+              "eventId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "eventType": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "eventId": {
+                  "column": "eventId"
+                },
+                "eventType": {
+                  "column": "eventType"
+                },
+                "id": {
+                  "column": "id"
+                }
+              },
+              "namespaceId": "public",
+              "table": "paymosWebhookEvent"
             }
           },
           "PpqcheckTransaction": {
@@ -2237,6 +2282,43 @@
                 }
               ]
             },
+            "paymosWebhookEvent": {
+              "columns": {
+                "eventId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "eventType": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "expression": "autoincrement()",
+                    "kind": "function"
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "eventId"
+                  ]
+                }
+              ]
+            },
             "ppqcheckTransaction": {
               "columns": {
                 "amount": {
@@ -2836,7 +2918,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "2b24c4c03f51d27adc34ff7dc5110defa4ff72e3898cc5f0b4e5f1f119f22bd4"
+    "storageHash": "9aa6bdb4e98f1b613a85a1e12c97db9a16f2e4793024c4599e5120e28b424963"
   },
   "capabilities": {
     "postgres": {
