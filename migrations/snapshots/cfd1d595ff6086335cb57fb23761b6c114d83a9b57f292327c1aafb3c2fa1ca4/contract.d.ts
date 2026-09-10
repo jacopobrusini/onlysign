@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'2b24c4c03f51d27adc34ff7dc5110defa4ff72e3898cc5f0b4e5f1f119f22bd4'>;
+  StorageHashBase<'cfd1d595ff6086335cb57fb23761b6c114d83a9b57f292327c1aafb3c2fa1ca4'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -326,13 +326,8 @@ export type FieldOutputTypes = {
       readonly packageId: CodecTypes['pg/int4@1']['output'];
       readonly tokens: CodecTypes['pg/int4@1']['output'];
       readonly amount: CodecTypes['pg/numeric@1']['output'];
-      readonly payCurrency: CodecTypes['pg/text@1']['output'] | null;
-      readonly payAmount: CodecTypes['pg/numeric@1']['output'] | null;
-      readonly feeAmount: CodecTypes['pg/numeric@1']['output'] | null;
-      readonly feeCurrency: CodecTypes['pg/text@1']['output'] | null;
       readonly paymentId: CodecTypes['pg/text@1']['output'];
       readonly status: 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED';
-      readonly paymentStatus: CodecTypes['pg/text@1']['output'] | null;
     };
     readonly TokenTransaction: {
       readonly id: CodecTypes['pg/int4@1']['output'];
@@ -441,13 +436,8 @@ export type FieldInputTypes = {
       readonly packageId: CodecTypes['pg/int4@1']['input'];
       readonly tokens: CodecTypes['pg/int4@1']['input'];
       readonly amount: CodecTypes['pg/numeric@1']['input'];
-      readonly payCurrency: CodecTypes['pg/text@1']['input'] | null;
-      readonly payAmount: CodecTypes['pg/numeric@1']['input'] | null;
-      readonly feeAmount: CodecTypes['pg/numeric@1']['input'] | null;
-      readonly feeCurrency: CodecTypes['pg/text@1']['input'] | null;
       readonly paymentId: CodecTypes['pg/text@1']['input'];
       readonly status: 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED';
-      readonly paymentStatus: CodecTypes['pg/text@1']['input'] | null;
     };
     readonly TokenTransaction: {
       readonly id: CodecTypes['pg/int4@1']['input'];
@@ -552,14 +542,9 @@ export type StorageColumnTypes = {
     };
     readonly tokenPurchase: {
       readonly amount: CodecTypes['pg/numeric@1']['output'];
-      readonly feeAmount: CodecTypes['pg/numeric@1']['output'] | null;
-      readonly feeCurrency: CodecTypes['pg/text@1']['output'] | null;
       readonly id: CodecTypes['pg/int4@1']['output'];
       readonly packageId: CodecTypes['pg/int4@1']['output'];
-      readonly payAmount: CodecTypes['pg/numeric@1']['output'] | null;
-      readonly payCurrency: CodecTypes['pg/text@1']['output'] | null;
       readonly paymentId: CodecTypes['pg/text@1']['output'];
-      readonly paymentStatus: CodecTypes['pg/text@1']['output'] | null;
       readonly status: 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED';
       readonly tokens: CodecTypes['pg/int4@1']['output'];
       readonly userId: CodecTypes['pg/int4@1']['output'];
@@ -667,14 +652,9 @@ export type StorageColumnInputTypes = {
     };
     readonly tokenPurchase: {
       readonly amount: CodecTypes['pg/numeric@1']['input'];
-      readonly feeAmount: CodecTypes['pg/numeric@1']['input'] | null;
-      readonly feeCurrency: CodecTypes['pg/text@1']['input'] | null;
       readonly id: CodecTypes['pg/int4@1']['input'];
       readonly packageId: CodecTypes['pg/int4@1']['input'];
-      readonly payAmount: CodecTypes['pg/numeric@1']['input'] | null;
-      readonly payCurrency: CodecTypes['pg/text@1']['input'] | null;
       readonly paymentId: CodecTypes['pg/text@1']['input'];
-      readonly paymentStatus: CodecTypes['pg/text@1']['input'] | null;
       readonly status: 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED';
       readonly tokens: CodecTypes['pg/int4@1']['input'];
       readonly userId: CodecTypes['pg/int4@1']['input'];
@@ -1372,26 +1352,6 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/numeric@1';
                   readonly nullable: false;
                 };
-                readonly payCurrency: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
-                readonly payAmount: {
-                  readonly nativeType: 'numeric';
-                  readonly codecId: 'pg/numeric@1';
-                  readonly nullable: true;
-                };
-                readonly feeAmount: {
-                  readonly nativeType: 'numeric';
-                  readonly codecId: 'pg/numeric@1';
-                  readonly nullable: true;
-                };
-                readonly feeCurrency: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
-                };
                 readonly paymentId: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -1401,11 +1361,6 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
-                };
-                readonly paymentStatus: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
                 };
               };
               primaryKey: { readonly columns: readonly ['id'] };
@@ -2298,32 +2253,12 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/numeric@1' };
               };
-              readonly payCurrency: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly payAmount: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/numeric@1' };
-              };
-              readonly feeAmount: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/numeric@1' };
-              };
-              readonly feeCurrency: {
-                readonly nullable: true;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
               readonly paymentId: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly status: {
                 readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly paymentStatus: {
-                readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
             };
@@ -2379,13 +2314,8 @@ type ContractBase = Omit<
                 readonly packageId: { readonly column: 'packageId' };
                 readonly tokens: { readonly column: 'tokens' };
                 readonly amount: { readonly column: 'amount' };
-                readonly payCurrency: { readonly column: 'payCurrency' };
-                readonly payAmount: { readonly column: 'payAmount' };
-                readonly feeAmount: { readonly column: 'feeAmount' };
-                readonly feeCurrency: { readonly column: 'feeCurrency' };
                 readonly paymentId: { readonly column: 'paymentId' };
                 readonly status: { readonly column: 'status' };
-                readonly paymentStatus: { readonly column: 'paymentStatus' };
               };
             };
           };

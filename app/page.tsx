@@ -80,7 +80,7 @@ export default function Home() {
                 Crea account
               </Link>
             ) : (
-              <div className="h-[46px] w-[140px] rounded-xl bg-white/10" />
+              <div className="h-46px w-140px rounded-xl bg-white/10" />
             )}
 
             <Link

@@ -6,18 +6,25 @@ model User {
   email           String    @unique
   passwordHash    String
   emailVerified   Boolean   @default(false)
+  tokenBalance    Int       @default(0)
+  role            String    @default("USER")
 
   emailVerificationTokens EmailVerificationToken[]
-  passwordChangeTokens PasswordChangeToken[]
-  accountDeletionTokens AccountDeletionToken[]
-  devices Device[]
+  passwordChangeTokens    PasswordChangeToken[]
+  accountDeletionTokens   AccountDeletionToken[]
+
+  devices                  Device[]
   deviceRegistrationTokens DeviceRegistration[]
-  sessions Session[]
+  sessions                 Session[]
+
+  tokenPurchases           TokenPurchase[]
+  tokenTransactions        TokenTransaction[]
+  certificateOrders        CertificateOrder[]
 }
 
 model EmailVerificationToken {
-  id        Int       @id @default(autoincrement())
-  tokenHash String    @unique
+  id        Int      @id @default(autoincrement())
+  tokenHash String   @unique
   userId    Int
   expiresAt DateTime
 
@@ -26,16 +33,16 @@ model EmailVerificationToken {
 
 model Session {
   id               Int      @id @default(autoincrement())
-  sessionTokenHash  String   @unique
-  userId            Int
-  expiresAt         DateTime
+  sessionTokenHash String   @unique
+  userId           Int
+  expiresAt        DateTime
 
   user User @relation(fields: [userId], references: [id])
 }
 
 model PasswordChangeToken {
-  id           Int       @id @default(autoincrement())
-  tokenHash    String    @unique
+  id           Int      @id @default(autoincrement())
+  tokenHash    String   @unique
   userId       Int
   passwordHash String
   expiresAt    DateTime
@@ -44,8 +51,8 @@ model PasswordChangeToken {
 }
 
 model AccountDeletionToken {
-  id        Int       @id @default(autoincrement())
-  tokenHash String    @unique
+  id        Int      @id @default(autoincrement())
+  tokenHash String   @unique
   userId    Int
   expiresAt DateTime
 
@@ -53,13 +60,15 @@ model AccountDeletionToken {
 }
 
 model Device {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  udid      String   @unique
-  product   String
+  id      Int    @id @default(autoincrement())
+  userId  Int
+  udid    String @unique
+  product String
   build   String
 
   user User @relation(fields: [userId], references: [id])
+
+  certificateOrders CertificateOrder[]
 }
 
 model DeviceRegistration {
@@ -72,8 +81,175 @@ model DeviceRegistration {
 }
 
 model DeviceModelCache {
-  product  String @id
-  model    String
-  build    String
-  version  String
+  product String @id
+  model   String
+  build   String
+  version String
+}
+
+
+// ─────────────────────────────────────────────
+// TOKEN PACKAGES
+// ─────────────────────────────────────────────
+
+model TokenPackage {
+  id                  Int     @id @default(autoincrement())
+  name                String
+  tokens              Int
+  price               Decimal
+  ppqcheckBudget      Decimal
+  active              Boolean @default(true)
+
+  purchases TokenPurchase[]
+}
+
+
+// ─────────────────────────────────────────────
+// TOKEN PURCHASES
+// ─────────────────────────────────────────────
+
+model TokenPurchase {
+
+  id            Int      @id @default(autoincrement())
+
+  userId        Int
+
+  packageId     Int
+
+  tokens        Int
+
+  // Prezzo del pacchetto in EUR
+  amount        Decimal
+
+  // Valuta scelta dall'utente su NOWPayments
+  payCurrency   String?
+
+  // Quantità della crypto richiesta da NOWPayments
+  payAmount     Decimal?
+
+  // Fee a carico dell'utente
+  feeAmount     Decimal?
+
+  // Valuta della fee
+  feeCurrency   String?
+
+  // ID del pagamento NOWPayments
+  paymentId     String   @unique
+
+  // Stato interno onlySign
+  status        TokenPurchaseStatus
+
+  // Ultimo stato ricevuto da NOWPayments
+  paymentStatus String?
+
+  user    User        @relation(fields: [userId], references: [id])
+
+  package TokenPackage @relation(fields: [packageId], references: [id])
+
+  transaction        TokenTransaction?
+
+  ppqcheckTransaction PpqcheckTransaction?
+}
+
+
+// ─────────────────────────────────────────────
+// TOKEN TRANSACTIONS
+// ─────────────────────────────────────────────
+
+model TokenTransaction {
+  id         Int                 @id @default(autoincrement())
+  userId     Int
+  amount     Int
+  type       TokenTransactionType
+  purchaseId Int?                @unique
+  orderId    Int?                @unique
+
+  user     User              @relation(fields: [userId], references: [id])
+  purchase TokenPurchase?    @relation(fields: [purchaseId], references: [id])
+  order    CertificateOrder? @relation(fields: [orderId], references: [id])
+}
+
+
+// ─────────────────────────────────────────────
+// CERTIFICATE TYPES
+// ─────────────────────────────────────────────
+
+model CertificateType {
+  id                Int     @id @default(autoincrement())
+  name              String
+  tokens            Int
+  validityDays      Int
+  antiRevokeDays    Int?
+  ppqcheckId        String  @unique
+  ppqcheckCost      Decimal
+  active             Boolean @default(true)
+
+  orders CertificateOrder[]
+}
+
+
+// ─────────────────────────────────────────────
+// CERTIFICATE ORDERS
+// ─────────────────────────────────────────────
+
+model CertificateOrder {
+  id                 Int      @id @default(autoincrement())
+  userId             Int
+  deviceId            Int
+  certificateTypeId  Int
+  tokens             Int
+  ppqcheckOrderId    String?  @unique
+  status             CertificateOrderStatus
+
+  user            User            @relation(fields: [userId], references: [id])
+  device          Device          @relation(fields: [deviceId], references: [id])
+  certificateType CertificateType @relation(fields: [certificateTypeId], references: [id])
+
+  tokenTransaction    TokenTransaction?
+  ppqcheckTransaction PpqcheckTransaction?
+}
+
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum TokenPurchaseStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum TokenTransactionType {
+  PURCHASE
+  CERTIFICATE
+  REFUND
+}
+
+enum CertificateOrderStatus {
+  PENDING
+  PROCESSING
+  WAITING_APPLE_APPROVED
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+model PpqcheckTransaction {
+  id                  Int      @id @default(autoincrement())
+  type                String
+  amount              Decimal
+  tokenPurchaseId     Int?     @unique
+  certificateOrderId  Int?     @unique
+  description         String?
+
+  tokenPurchase    TokenPurchase?    @relation(fields: [tokenPurchaseId], references: [id])
+  certificateOrder CertificateOrder? @relation(fields: [certificateOrderId], references: [id])
+}
+
+enum PpqcheckTransactionType {
+  TOKEN_BUDGET
+  CERTIFICATE_COST
+  CREDIT
 }

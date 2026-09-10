@@ -61,7 +61,7 @@ export async function getDeviceModel(product: string) {
 
     // Aggiorna la cache
     await db.orm.public.DeviceModelCache.upsert({
-      where: {
+      conflictOn: {
         product: normalizedProduct,
       },
       update: {

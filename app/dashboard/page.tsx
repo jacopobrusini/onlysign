@@ -12,7 +12,19 @@ export default async function Dashboard() {
     return null;
   }
 
-  const username = session.user.username;
+  const users = await db.orm.public.User
+    .where({
+      id: session.user.id,
+    })
+    .all();
+
+  const user = users[0];
+
+  if (!user) {
+    return null;
+  }
+
+  const username = user.username;
 
   const devices = await db.orm.public.Device
     .where({
@@ -62,7 +74,7 @@ export default async function Dashboard() {
           {/* Token */}
           <div className="grid gap-4 sm:grid-cols-3">
             <Link
-              href="/prezzi"
+              href="/dashboard/token"
               className="block rounded-2xl border border-white/10 bg-black/20 p-6 shadow-xl backdrop-blur-xl transition hover:bg-white/5"
             >
               <p className="text-sm text-white/50">
@@ -70,7 +82,7 @@ export default async function Dashboard() {
               </p>
 
               <p className="mt-2 text-4xl font-bold">
-                10
+                {user.tokenBalance}
               </p>
 
               <p className="mt-4 text-sm text-white/70">
