@@ -2,95 +2,143 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { db } from "@/prisma/db";
 
+const WEBHOOK_TOLERANCE_SECONDS = 300;
+
 type PaymosWebhookPayload = {
   event_id?: string;
   event_type?: string;
+  version?: number;
+  occurred_at?: number;
+  data?: {
+    invoice_id?: string;
+    status?: string;
+    is_final?: boolean;
+    is_test?: boolean;
+    order?: {
+      external_id?: string;
+      client_id?: string;
+      amount?: string;
+      currency?: string;
+    };
+    payment?: {
+      currency?: string;
+      network?: string;
+      expected?: string;
+      paid?: string;
+      remaining?: string;
+      fee?: string;
+      net?: string;
+    };
+  };
 };
+
+function safeEqual(a: string, b: string) {
+  const aBuffer = Buffer.from(a, "utf8");
+  const bBuffer = Buffer.from(b, "utf8");
+
+  if (aBuffer.length !== bBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(aBuffer, bBuffer);
+}
+
+function verifyWebhookSignature(
+  signatureHeader: string,
+  rawBody: string,
+  secret: string
+) {
+  const parts = signatureHeader.split(",");
+
+  let timestamp: string | null = null;
+  const signatures: string[] = [];
+
+  for (const part of parts) {
+    const [key, value] = part.split("=", 2);
+
+    if (key === "t" && value) {
+      timestamp = value;
+    }
+
+    if (key === "v1" && value) {
+      signatures.push(value);
+    }
+  }
+
+  if (!timestamp || signatures.length === 0) {
+    return false;
+  }
+
+  const timestampNumber = Number(timestamp);
+
+  if (!Number.isInteger(timestampNumber)) {
+    return false;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+
+  if (
+    Math.abs(now - timestampNumber) >
+    WEBHOOK_TOLERANCE_SECONDS
+  ) {
+    return false;
+  }
+
+  const signedPayload =
+    `${timestampNumber}.${rawBody}`;
+
+  const expectedSignature =
+    crypto
+      .createHmac(
+        "sha256",
+        secret
+      )
+      .update(signedPayload)
+      .digest("hex");
+
+  return signatures.some((signature) =>
+    safeEqual(signature, expectedSignature)
+  );
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const rawBody = await request.text();
-
-    const signatureHeader = request.headers.get("x-webhook-signature");
-    const timestampHeader = request.headers.get("x-webhook-timestamp");
-
-    if (!signatureHeader || !timestampHeader) {
-      console.error("Paymos webhook: missing signature headers");
-
-      return NextResponse.json(
-        { error: "Missing webhook signature headers" },
-        { status: 401 }
-      );
-    }
-
-    const webhookSecret = process.env.PAYMOS_WEBHOOK_SECRET;
+    const webhookSecret =
+      process.env.PAYMOS_WEBHOOK_SECRET;
 
     if (!webhookSecret) {
       console.error(
-        "Paymos webhook: PAYMOS_WEBHOOK_SECRET is not configured"
+        "Paymos webhook: PAYMOS_WEBHOOK_SECRET missing"
       );
 
       return NextResponse.json(
-        { error: "Webhook secret not configured" },
+        { error: "Webhook non configurato" },
         { status: 500 }
       );
     }
 
-    const timestamp = Number(timestampHeader);
+    const rawBody = await request.text();
 
-    if (!Number.isInteger(timestamp)) {
-      console.error("Paymos webhook: invalid timestamp");
+    const signatureHeader =
+      request.headers.get("x-webhook-signature");
 
+    if (!signatureHeader) {
       return NextResponse.json(
-        { error: "Invalid webhook timestamp" },
+        { error: "Firma mancante" },
         { status: 401 }
       );
     }
 
-    const now = Math.floor(Date.now() / 1000);
-
-    if (Math.abs(now - timestamp) > 300) {
-      console.error("Paymos webhook: timestamp outside tolerance");
-
-      return NextResponse.json(
-        { error: "Webhook timestamp expired" },
-        { status: 401 }
+    const validSignature =
+      verifyWebhookSignature(
+        signatureHeader,
+        rawBody,
+        webhookSecret
       );
-    }
 
-    const signaturePayload = `${timestamp}.${rawBody}`;
-
-    const expectedSignature = crypto
-      .createHmac("sha256", webhookSecret)
-      .update(signaturePayload)
-      .digest("hex");
-
-    const signatures = signatureHeader
-      .split(",")
-      .map((part) => part.trim())
-      .filter((part) => part.startsWith("v1="))
-      .map((part) => part.slice(3));
-
-    const signatureValid = signatures.some((signature) => {
-      if (!/^[a-fA-F0-9]{64}$/.test(signature)) {
-        return false;
-      }
-
-      try {
-        return crypto.timingSafeEqual(
-          Buffer.from(signature, "hex"),
-          Buffer.from(expectedSignature, "hex")
-        );
-      } catch {
-        return false;
-      }
-    });
-
-    if (!signatureValid) {
-      console.error("Paymos webhook: invalid signature");
-
+    if (!validSignature) {
       return NextResponse.json(
-        { error: "Invalid webhook signature" },
+        { error: "Firma non valida" },
         { status: 401 }
       );
     }
@@ -98,39 +146,344 @@ export async function POST(request: NextRequest) {
     let payload: PaymosWebhookPayload;
 
     try {
-      payload = JSON.parse(rawBody) as PaymosWebhookPayload;
+      payload =
+        JSON.parse(rawBody) as PaymosWebhookPayload;
     } catch {
-      console.error("Paymos webhook: invalid JSON");
-
       return NextResponse.json(
-        { error: "Invalid JSON body" },
+        { error: "Payload non valido" },
         { status: 400 }
       );
     }
 
-    const eventId = payload.event_id;
-    const eventType = payload.event_type;
+    const eventId =
+      payload.event_id ??
+      request.headers.get("x-webhook-id");
+
+    const eventType =
+      payload.event_type;
 
     if (!eventId || !eventType) {
-      console.error("Paymos webhook: missing event data");
-
       return NextResponse.json(
-        { error: "Missing event data" },
+        { error: "Evento non valido" },
         { status: 400 }
       );
     }
 
-    const existingEvent = await db.orm.public.PaymosWebhookEvent
-      .where({
+    /*
+     * Tutta la gestione dell'evento avviene
+     * nella stessa transazione.
+     *
+     * In questo modo:
+     *
+     * - l'evento viene salvato
+     * - l'acquisto viene marcato PAID
+     * - il saldo token viene incrementato
+     * - la TokenTransaction viene creata
+     *
+     * oppure non viene salvato nulla.
+     */
+
+    const result = await db.transaction(async (tx) => {
+      /*
+       * Deduplicazione dell'evento.
+       */
+
+      const existingEvents =
+        await tx.orm.public.PaymosWebhookEvent
+          .where({
+            eventId,
+          })
+          .all();
+
+      if (existingEvents.length > 0) {
+        return {
+          duplicate: true,
+          processed: true,
+        };
+      }
+
+      /*
+       * Salviamo l'evento verificato.
+       *
+       * Se successivamente qualcosa fallisce,
+       * la transazione viene annullata e Paymos
+       * potrà ritentare il webhook.
+       */
+
+      await tx.orm.public.PaymosWebhookEvent.create({
         eventId,
-      })
-      .first();
+        eventType,
+      });
 
-    if (existingEvent) {
-      console.log("Paymos webhook: duplicate event ignored");
-      console.log("Event ID:", eventId);
-      console.log("Event type:", eventType);
+      /*
+       * Gestiamo soltanto gli eventi terminali
+       * di pagamento riuscito.
+       */
 
+      if (
+        eventType !== "invoice.paid" &&
+        eventType !== "invoice.paid_over"
+      ) {
+        return {
+          duplicate: false,
+          processed: false,
+        };
+      }
+
+      const data = payload.data;
+
+      if (!data) {
+        console.error(
+          "Paymos webhook: data mancante",
+          eventId
+        );
+
+        return {
+          duplicate: false,
+          processed: false,
+        };
+      }
+
+      /*
+       * Il pagamento è valido solamente se:
+       *
+       * status = paid
+       * is_final = true
+       */
+
+      if (
+        data.status !== "paid" ||
+        data.is_final !== true
+      ) {
+        console.warn(
+          "Paymos webhook: stato non finale",
+          {
+            eventId,
+            eventType,
+            status: data.status,
+            isFinal: data.is_final,
+          }
+        );
+
+        return {
+          duplicate: false,
+          processed: false,
+        };
+      }
+
+      /*
+       * external_id è l'identificativo creato
+       * da onlySign durante la creazione dell'invoice.
+       */
+
+      const externalOrderId =
+        data.order?.external_id;
+
+      if (!externalOrderId) {
+        console.error(
+          "Paymos webhook: external_order_id mancante",
+          eventId
+        );
+
+        return {
+          duplicate: false,
+          processed: false,
+        };
+      }
+
+      /*
+       * Troviamo l'acquisto onlySign.
+       */
+
+      const purchases =
+        await tx.orm.public.TokenPurchase
+          .where({
+            paymosOrderId: externalOrderId,
+          })
+          .all();
+
+      const purchase = purchases[0];
+
+      if (!purchase) {
+        console.error(
+          "Paymos webhook: TokenPurchase non trovata",
+          {
+            eventId,
+            externalOrderId,
+          }
+        );
+
+        return {
+          duplicate: false,
+          processed: false,
+        };
+      }
+
+      /*
+       * Verifichiamo importo e valuta fiat.
+       *
+       * Non utilizziamo l'importo crypto,
+       * perché quello dipende dal cambio Paymos.
+       */
+
+      const orderAmount =
+        Number(data.order?.amount);
+
+      const purchaseAmount =
+        Number(purchase.amount);
+
+      const orderCurrency =
+        data.order?.currency;
+
+      if (
+        !Number.isFinite(orderAmount) ||
+        !Number.isFinite(purchaseAmount) ||
+        orderCurrency !== "EUR" ||
+        Math.abs(orderAmount - purchaseAmount) >
+          0.01
+      ) {
+        console.error(
+          "Paymos webhook: importo o valuta non corrispondenti",
+          {
+            eventId,
+            purchaseId: purchase.id,
+            expectedAmount: purchaseAmount,
+            receivedAmount: orderAmount,
+            receivedCurrency: orderCurrency,
+          }
+        );
+
+        return {
+          duplicate: false,
+          processed: false,
+        };
+      }
+
+      /*
+       * Claim atomico dell'acquisto.
+       *
+       * Cambiamo PENDING -> PAID solamente se
+       * l'acquisto è ancora PENDING.
+       *
+       * Se due webhook arrivano contemporaneamente,
+       * solamente uno dei due potrà effettuare
+       * questo aggiornamento.
+       */
+
+      const claimedPurchase =
+        await tx.orm.public.TokenPurchase
+          .where({
+            id: purchase.id,
+            status: "PENDING",
+          })
+          .update({
+            status: "PAID",
+            paymentStatus: "PAID",
+          });
+
+      if (!claimedPurchase) {
+        /*
+         * Un altro webhook ha già processato
+         * questo acquisto.
+         */
+
+        return {
+          duplicate: false,
+          processed: true,
+          alreadyPaid: true,
+          purchaseId: purchase.id,
+          tokens: purchase.tokens,
+        };
+      }
+
+      /*
+       * Verifichiamo che l'utente esista.
+       */
+
+      const users =
+        await tx.orm.public.User
+          .where({
+            id: purchase.userId,
+          })
+          .all();
+
+      const user = users[0];
+
+      if (!user) {
+        throw new Error(
+          `Paymos webhook: utente non trovato: ${purchase.userId}`
+        );
+      }
+
+      /*
+       * Incremento atomico del saldo token.
+       *
+       * Non facciamo:
+       *
+       * user.tokenBalance + purchase.tokens
+       *
+       * perché due acquisti contemporanei potrebbero
+       * leggere lo stesso saldo.
+       *
+       * PostgreSQL esegue invece:
+       *
+       * tokenBalance = tokenBalance + N
+       *
+       * direttamente sul database.
+       */
+
+      const incrementPlan =
+  tx.sql.public.user
+    .update((f, fns) => ({
+      tokenBalance:
+        fns.raw`${f.tokenBalance} + ${purchase.tokens}`
+          .returns("pg/int4@1"),
+    }))
+    .where((f, fns) =>
+      fns.eq(f.id, purchase.userId)
+    )
+    .returning("id", "tokenBalance")
+    .build();
+
+await tx.execute(incrementPlan);
+
+      /*
+       * Registriamo la transazione contabile.
+       *
+       * purchaseId è UNIQUE nel database.
+       */
+
+      await tx.orm.public.TokenTransaction.create({
+        userId: purchase.userId,
+        amount: purchase.tokens,
+        type: "PURCHASE",
+        purchaseId: purchase.id,
+      });
+
+      console.log(
+        "Paymos webhook: token accreditati",
+        {
+          eventId,
+          purchaseId: purchase.id,
+          userId: purchase.userId,
+          tokens: purchase.tokens,
+        }
+      );
+
+      return {
+        duplicate: false,
+        processed: true,
+        alreadyPaid: false,
+        purchaseId: purchase.id,
+        tokens: purchase.tokens,
+      };
+    });
+
+    /*
+     * Risposta per evento duplicato.
+     */
+
+    if (result.duplicate) {
       return NextResponse.json({
         received: true,
         verified: true,
@@ -138,51 +491,53 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    try {
-      await db.orm.public.PaymosWebhookEvent.create({
-        eventId,
-        eventType,
+    /*
+     * Evento verificato ma non rilevante
+     * per l'accredito dei token.
+     */
+
+    if (!result.processed) {
+      return NextResponse.json({
+        received: true,
+        verified: true,
+        processed: false,
       });
-    } catch (error) {
-      const duplicateEvent = await db.orm.public.PaymosWebhookEvent
-        .where({
-          eventId,
-        })
-        .first();
-
-      if (duplicateEvent) {
-        console.log(
-          "Paymos webhook: duplicate event detected by database"
-        );
-
-        return NextResponse.json({
-          received: true,
-          verified: true,
-          duplicate: true,
-        });
-      }
-
-      throw error;
     }
 
-    console.log("=== PAYMOS WEBHOOK VERIFIED ===");
-    console.log("Event ID:", eventId);
-    console.log("Event type:", eventType);
-    console.log("Timestamp:", timestamp);
-    console.log("Signature: VALID");
-    console.log("Idempotency: NEW EVENT");
-    console.log("Payload:", payload);
+    /*
+     * Acquisto già processato.
+     */
+
+    if (result.alreadyPaid) {
+      return NextResponse.json({
+        received: true,
+        verified: true,
+        processed: true,
+        alreadyPaid: true,
+        purchaseId: result.purchaseId,
+        tokens: result.tokens,
+      });
+    }
+
+    /*
+     * Accredito completato.
+     */
 
     return NextResponse.json({
       received: true,
       verified: true,
-      duplicate: false,
+      processed: true,
+      purchaseId: result.purchaseId,
+      tokens: result.tokens,
     });
   } catch (error) {
-    console.error("Paymos webhook error:", error);
+    console.error(
+      "Paymos webhook error:",
+      error
+    );
 
     return NextResponse.json(
-      { error: "Internal webhook error" },
+      { error: "Errore interno" },
       { status: 500 }
     );
   }
