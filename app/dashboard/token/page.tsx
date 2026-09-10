@@ -1,50 +1,22 @@
 import Link from "next/link";
 import Header from "@/components/Header";
+import BuyTokenButton from "@/components/BuyTokenButton";
 import { getSession } from "@/lib/session";
 import { db } from "@/prisma/db";
 
-const packages = [
-  {
-    tokens: 1,
-    price: 2.5,
-  },
-  {
-    tokens: 2,
-    price: 5,
-  },
-  {
-    tokens: 4,
-    price: 10,
-  },
-  {
-    tokens: 8,
-    price: 20,
-  },
-  {
-    tokens: 16,
-    price: 36,
-    originalPrice: 40,
-    discount: 10,
-  },
-  {
-    tokens: 32,
-    price: 68,
-    originalPrice: 80,
-    discount: 15,
-  },
-  {
-    tokens: 64,
-    price: 128,
-    originalPrice: 160,
-    discount: 20,
-  },
-  {
-    tokens: 128,
-    price: 240,
-    originalPrice: 320,
-    discount: 25,
-  },
-];
+const originalPrices: Record<number, number> = {
+  16: 40,
+  32: 80,
+  64: 160,
+  128: 320,
+};
+
+const discounts: Record<number, number> = {
+  16: 10,
+  32: 15,
+  64: 20,
+  128: 25,
+};
 
 export default async function TokenPage() {
   const session = await getSession();
@@ -64,6 +36,14 @@ export default async function TokenPage() {
   if (!user) {
     return null;
   }
+
+  const packages = await db.orm.public.TokenPackage
+    .where({
+      active: true,
+    })
+    .all();
+
+  packages.sort((a, b) => a.tokens - b.tokens);
 
   return (
     <main
@@ -123,65 +103,66 @@ export default async function TokenPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {packages.map((pkg) => (
-                <div
-                  key={pkg.tokens}
-                  className="flex flex-col rounded-2xl border border-white/10 bg-black/20 p-6 shadow-xl backdrop-blur-xl transition hover:bg-white/5"
-                >
-                  {/* Token */}
-                  <div>
-                    <p className="text-sm text-white/50">
-                      Pacchetto
-                    </p>
+              {packages.map((pkg) => {
+                const originalPrice = originalPrices[pkg.tokens];
+                const discount = discounts[pkg.tokens];
+                const price = Number(pkg.price);
 
-                    <p className="mt-2 text-3xl font-bold">
-                      {pkg.tokens}
-                      <span className="ml-2 text-base font-medium text-white/50">
-                        {pkg.tokens === 1 ? "token" : "token"}
-                      </span>
-                    </p>
-                  </div>
+                return (
+                  <div
+                    key={pkg.id}
+                    className="flex flex-col rounded-2xl border border-white/10 bg-black/20 p-6 shadow-xl backdrop-blur-xl transition hover:bg-white/5"
+                  >
+                    {/* Token */}
+                    <div>
+                      <p className="text-sm text-white/50">
+                        Pacchetto
+                      </p>
 
-                  {/* Prezzo */}
-                  <div className="mt-8">
-                    <p className="text-sm text-white/50">
-                      Prezzo
-                    </p>
-
-                    <div className="mt-2 flex flex-wrap items-baseline gap-2">
-                      {pkg.originalPrice ? (
-                        <>
-                          <span className="text-base text-white/40 line-through">
-                            €{pkg.originalPrice.toFixed(2)}
-                          </span>
-
-                          <span className="text-2xl font-bold">
-                            €{pkg.price.toFixed(2)}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-2xl font-bold">
-                          €{pkg.price.toFixed(2)}
+                      <p className="mt-2 text-3xl font-bold">
+                        {pkg.tokens}
+                        <span className="ml-2 text-base font-medium text-white/50">
+                          {pkg.tokens === 1 ? "token" : "token"}
                         </span>
-                      )}
+                      </p>
                     </div>
 
-                    {pkg.discount && (
-                      <span className="mt-2 inline-block rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-white/60">
-                        -{pkg.discount}%
-                      </span>
-                    )}
-                  </div>
+                    {/* Prezzo */}
+                    <div className="mt-8">
+                      <p className="text-sm text-white/50">
+                        Prezzo
+                      </p>
 
-                  {/* Acquista */}
-                  <button
-                    type="button"
-                    className="mt-8 w-full rounded-xl border border-white/10 bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-white/90"
-                  >
-                    Acquista
-                  </button>
-                </div>
-              ))}
+                      <div className="mt-2 flex flex-wrap items-baseline gap-2">
+                        {originalPrice ? (
+                          <>
+                            <span className="text-base text-white/40 line-through">
+                              €{originalPrice.toFixed(2)}
+                            </span>
+
+                            <span className="text-2xl font-bold">
+                              €{price.toFixed(2)}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-2xl font-bold">
+                            €{price.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+
+                      {discount ? (
+                        <span className="mt-2 inline-block rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-white/60">
+                          -{discount}%
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {/* Acquista */}
+                    <BuyTokenButton packageId={pkg.id} />
+                  </div>
+                );
+              })}
             </div>
           </div>
 

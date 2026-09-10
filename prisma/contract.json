@@ -1208,6 +1208,13 @@
                   "kind": "scalar"
                 }
               },
+              "paymosOrderId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "status": {
                 "nullable": false,
                 "type": {
@@ -1326,6 +1333,9 @@
                 },
                 "paymentStatus": {
                   "column": "paymentStatus"
+                },
+                "paymosOrderId": {
+                  "column": "paymosOrderId"
                 },
                 "status": {
                   "column": "status"
@@ -2585,6 +2595,11 @@
                   "nativeType": "text",
                   "nullable": true
                 },
+                "paymosOrderId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "status": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -2668,6 +2683,11 @@
                 {
                   "columns": [
                     "paymentId"
+                  ]
+                },
+                {
+                  "columns": [
+                    "paymosOrderId"
                   ]
                 }
               ]
@@ -2918,7 +2938,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "9aa6bdb4e98f1b613a85a1e12c97db9a16f2e4793024c4599e5120e28b424963"
+    "storageHash": "9b4e184efae000309295c6148a09b4de0de6ec428b32a8f2613d688fd4fd0d07"
   },
   "capabilities": {
     "postgres": {

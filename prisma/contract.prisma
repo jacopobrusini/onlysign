@@ -133,8 +133,11 @@ model TokenPurchase {
   // Valuta della fee
   feeCurrency   String?
 
-  // ID del pagamento NOWPayments
+  // ID univoco del pagamento restituito dal provider
   paymentId     String   @unique
+
+
+  paymosOrderId String? @unique
 
   // Stato interno onlySign
   status        TokenPurchaseStatus
