@@ -119,6 +119,11 @@ export async function POST(request: NextRequest) {
 
     const rawBody = await request.text();
 
+console.log(
+  "Paymos webhook TEST payload:",
+  rawBody
+);
+
     const signatureHeader =
       request.headers.get("x-webhook-signature");
 
