@@ -244,20 +244,42 @@ enum CertificateOrderStatus {
   CANCELLED
 }
 
+model SyncCredit {
+
+  id           Int     @id @default(autoincrement())
+
+  ppqAmount    Decimal @default("0")
+
+  ppqCoverage  Decimal @default("0")
+
+}
+
 model PpqcheckTransaction {
-  id                  Int      @id @default(autoincrement())
-  type                String
+
+  id                  Int                      @id @default(autoincrement())
+
+  type                PpqcheckTransactionType
+
   amount              Decimal
-  tokenPurchaseId     Int?     @unique
-  certificateOrderId  Int?     @unique
+
+  tokenPurchaseId     Int?                     @unique
+
+  certificateOrderId  Int?                     @unique
+
   description         String?
 
-  tokenPurchase    TokenPurchase?    @relation(fields: [tokenPurchaseId], references: [id])
-  certificateOrder CertificateOrder? @relation(fields: [certificateOrderId], references: [id])
+  tokenPurchase       TokenPurchase?           @relation(fields: [tokenPurchaseId], references: [id])
+
+  certificateOrder    CertificateOrder?        @relation(fields: [certificateOrderId], references: [id])
 }
 
 enum PpqcheckTransactionType {
-  TOKEN_BUDGET
-  CERTIFICATE_COST
+
   CREDIT
+
+  CERTIFICATE_COST
+
+  REFUND
+
+  ADJUSTMENT
 }

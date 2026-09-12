@@ -48,6 +48,10 @@
       "model": "Session",
       "namespace": "public"
     },
+    "syncCredit": {
+      "model": "SyncCredit",
+      "namespace": "public"
+    },
     "tokenPackage": {
       "model": "TokenPackage",
       "namespace": "public"
@@ -102,16 +106,20 @@
             "codecId": "pg/text@1",
             "members": [
               {
-                "name": "TOKEN_BUDGET",
-                "value": "TOKEN_BUDGET"
+                "name": "CREDIT",
+                "value": "CREDIT"
               },
               {
                 "name": "CERTIFICATE_COST",
                 "value": "CERTIFICATE_COST"
               },
               {
-                "name": "CREDIT",
-                "value": "CREDIT"
+                "name": "REFUND",
+                "value": "REFUND"
+              },
+              {
+                "name": "ADJUSTMENT",
+                "value": "ADJUSTMENT"
               }
             ]
           },
@@ -929,6 +937,12 @@
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "PpqcheckTransactionType",
+                  "namespaceId": "public",
+                  "plane": "domain"
                 }
               }
             },
@@ -1054,6 +1068,47 @@
               },
               "namespaceId": "public",
               "table": "session"
+            }
+          },
+          "SyncCredit": {
+            "fields": {
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "ppqAmount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/numeric@1",
+                  "kind": "scalar"
+                }
+              },
+              "ppqCoverage": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/numeric@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "id": {
+                  "column": "id"
+                },
+                "ppqAmount": {
+                  "column": "ppqAmount"
+                },
+                "ppqCoverage": {
+                  "column": "ppqCoverage"
+                }
+              },
+              "namespaceId": "public",
+              "table": "syncCredit"
             }
           },
           "TokenPackage": {
@@ -2330,6 +2385,13 @@
               ]
             },
             "ppqcheckTransaction": {
+              "checks": [
+                {
+                  "expression": "\"type\" IN ('CREDIT', 'CERTIFICATE_COST', 'REFUND', 'ADJUSTMENT')",
+                  "name": "ppqcheckTransaction_type_check_e7713a7a",
+                  "prefix": "ppqcheckTransaction_type_check"
+                }
+              ],
               "columns": {
                 "amount": {
                   "codecId": "pg/numeric@1",
@@ -2363,7 +2425,13 @@
                 "type": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
-                  "nullable": false
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "PpqcheckTransactionType",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
                 }
               },
               "foreignKeys": [
@@ -2486,6 +2554,45 @@
                   ]
                 }
               ]
+            },
+            "syncCredit": {
+              "columns": {
+                "id": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "expression": "autoincrement()",
+                    "kind": "function"
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "ppqAmount": {
+                  "codecId": "pg/numeric@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "0"
+                  },
+                  "nativeType": "numeric",
+                  "nullable": false
+                },
+                "ppqCoverage": {
+                  "codecId": "pg/numeric@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "0"
+                  },
+                  "nativeType": "numeric",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
             },
             "tokenPackage": {
               "columns": {
@@ -2910,9 +3017,10 @@
             "PpqcheckTransactionType": {
               "kind": "valueSet",
               "values": [
-                "TOKEN_BUDGET",
+                "CREDIT",
                 "CERTIFICATE_COST",
-                "CREDIT"
+                "REFUND",
+                "ADJUSTMENT"
               ]
             },
             "TokenPurchaseStatus": {
@@ -2938,7 +3046,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "9b4e184efae000309295c6148a09b4de0de6ec428b32a8f2613d688fd4fd0d07"
+    "storageHash": "f1d81a38c96b4604b0473f89236f1134db1835007f10ba5a058000c700a1de7c"
   },
   "capabilities": {
     "postgres": {

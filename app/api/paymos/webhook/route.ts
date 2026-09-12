@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { db } from "@/prisma/db";
 
+const PPQCHECK_BUDGET_PER_TOKEN = 1.4;
+
 const WEBHOOK_TOLERANCE_SECONDS = 300;
 
 type PaymosWebhookPayload = {
@@ -9,17 +11,20 @@ type PaymosWebhookPayload = {
   event_type?: string;
   version?: number;
   occurred_at?: number;
+
   data?: {
     invoice_id?: string;
     status?: string;
     is_final?: boolean;
     is_test?: boolean;
+
     order?: {
       external_id?: string;
       client_id?: string;
       amount?: string;
       currency?: string;
     };
+
     payment?: {
       currency?: string;
       network?: string;
@@ -40,7 +45,10 @@ function safeEqual(a: string, b: string) {
     return false;
   }
 
-  return crypto.timingSafeEqual(aBuffer, bBuffer);
+  return crypto.timingSafeEqual(
+    aBuffer,
+    bBuffer
+  );
 }
 
 function verifyWebhookSignature(
@@ -89,19 +97,21 @@ function verifyWebhookSignature(
 
   const expectedSignature =
     crypto
-      .createHmac(
-        "sha256",
-        secret
-      )
+      .createHmac("sha256", secret)
       .update(signedPayload)
       .digest("hex");
 
   return signatures.some((signature) =>
-    safeEqual(signature, expectedSignature)
+    safeEqual(
+      signature,
+      expectedSignature
+    )
   );
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(
+  request: NextRequest
+) {
   try {
     const webhookSecret =
       process.env.PAYMOS_WEBHOOK_SECRET;
@@ -112,24 +122,27 @@ export async function POST(request: NextRequest) {
       );
 
       return NextResponse.json(
-        { error: "Webhook non configurato" },
+        {
+          error:
+            "Webhook non configurato",
+        },
         { status: 500 }
       );
     }
 
-    const rawBody = await request.text();
-
-console.log(
-  "Paymos webhook TEST payload:",
-  rawBody
-);
+    const rawBody =
+      await request.text();
 
     const signatureHeader =
-      request.headers.get("x-webhook-signature");
+      request.headers.get(
+        "x-webhook-signature"
+      );
 
     if (!signatureHeader) {
       return NextResponse.json(
-        { error: "Firma mancante" },
+        {
+          error: "Firma mancante",
+        },
         { status: 401 }
       );
     }
@@ -143,7 +156,9 @@ console.log(
 
     if (!validSignature) {
       return NextResponse.json(
-        { error: "Firma non valida" },
+        {
+          error: "Firma non valida",
+        },
         { status: 401 }
       );
     }
@@ -155,337 +170,413 @@ console.log(
         JSON.parse(rawBody) as PaymosWebhookPayload;
     } catch {
       return NextResponse.json(
-        { error: "Payload non valido" },
+        {
+          error: "Payload non valido",
+        },
         { status: 400 }
       );
     }
 
     const eventId =
       payload.event_id ??
-      request.headers.get("x-webhook-id");
+      request.headers.get(
+        "x-webhook-id"
+      );
 
     const eventType =
       payload.event_type;
 
     if (!eventId || !eventType) {
       return NextResponse.json(
-        { error: "Evento non valido" },
+        {
+          error: "Evento non valido",
+        },
         { status: 400 }
       );
     }
 
-    /*
-     * Tutta la gestione dell'evento avviene
-     * nella stessa transazione.
-     *
-     * In questo modo:
-     *
-     * - l'evento viene salvato
-     * - l'acquisto viene marcato PAID
-     * - il saldo token viene incrementato
-     * - la TokenTransaction viene creata
-     *
-     * oppure non viene salvato nulla.
-     */
-
-    const result = await db.transaction(async (tx) => {
-      /*
-       * Deduplicazione dell'evento.
-       */
-
-      const existingEvents =
-        await tx.orm.public.PaymosWebhookEvent
-          .where({
-            eventId,
-          })
-          .all();
-
-      if (existingEvents.length > 0) {
-        return {
-          duplicate: true,
-          processed: true,
-        };
-      }
-
-      /*
-       * Salviamo l'evento verificato.
-       *
-       * Se successivamente qualcosa fallisce,
-       * la transazione viene annullata e Paymos
-       * potrà ritentare il webhook.
-       */
-
-      await tx.orm.public.PaymosWebhookEvent.create({
-        eventId,
-        eventType,
-      });
-
-      /*
-       * Gestiamo soltanto gli eventi terminali
-       * di pagamento riuscito.
-       */
-
-      if (
-        eventType !== "invoice.paid" &&
-        eventType !== "invoice.paid_over"
-      ) {
-        return {
-          duplicate: false,
-          processed: false,
-        };
-      }
-
-      const data = payload.data;
-
-      if (!data) {
-        console.error(
-          "Paymos webhook: data mancante",
-          eventId
-        );
-
-        return {
-          duplicate: false,
-          processed: false,
-        };
-      }
-
-      /*
-       * Il pagamento è valido solamente se:
-       *
-       * status = paid
-       * is_final = true
-       */
-
-      if (
-        data.status !== "paid" ||
-        data.is_final !== true
-      ) {
-        console.warn(
-          "Paymos webhook: stato non finale",
-          {
-            eventId,
-            eventType,
-            status: data.status,
-            isFinal: data.is_final,
-          }
-        );
-
-        return {
-          duplicate: false,
-          processed: false,
-        };
-      }
-
-      /*
-       * external_id è l'identificativo creato
-       * da onlySign durante la creazione dell'invoice.
-       */
-
-      const externalOrderId =
-        data.order?.external_id;
-
-      if (!externalOrderId) {
-        console.error(
-          "Paymos webhook: external_order_id mancante",
-          eventId
-        );
-
-        return {
-          duplicate: false,
-          processed: false,
-        };
-      }
-
-      /*
-       * Troviamo l'acquisto onlySign.
-       */
-
-      const purchases =
-        await tx.orm.public.TokenPurchase
-          .where({
-            paymosOrderId: externalOrderId,
-          })
-          .all();
-
-      const purchase = purchases[0];
-
-      if (!purchase) {
-        console.error(
-          "Paymos webhook: TokenPurchase non trovata",
-          {
-            eventId,
-            externalOrderId,
-          }
-        );
-
-        return {
-          duplicate: false,
-          processed: false,
-        };
-      }
-
-      /*
-       * Verifichiamo importo e valuta fiat.
-       *
-       * Non utilizziamo l'importo crypto,
-       * perché quello dipende dal cambio Paymos.
-       */
-
-      const orderAmount =
-        Number(data.order?.amount);
-
-      const purchaseAmount =
-        Number(purchase.amount);
-
-      const orderCurrency =
-        data.order?.currency;
-
-      if (
-        !Number.isFinite(orderAmount) ||
-        !Number.isFinite(purchaseAmount) ||
-        orderCurrency !== "EUR" ||
-        Math.abs(orderAmount - purchaseAmount) >
-          0.01
-      ) {
-        console.error(
-          "Paymos webhook: importo o valuta non corrispondenti",
-          {
-            eventId,
-            purchaseId: purchase.id,
-            expectedAmount: purchaseAmount,
-            receivedAmount: orderAmount,
-            receivedCurrency: orderCurrency,
-          }
-        );
-
-        return {
-          duplicate: false,
-          processed: false,
-        };
-      }
-
-      /*
-       * Claim atomico dell'acquisto.
-       *
-       * Cambiamo PENDING -> PAID solamente se
-       * l'acquisto è ancora PENDING.
-       *
-       * Se due webhook arrivano contemporaneamente,
-       * solamente uno dei due potrà effettuare
-       * questo aggiornamento.
-       */
-
-      const claimedPurchase =
-        await tx.orm.public.TokenPurchase
-          .where({
-            id: purchase.id,
-            status: "PENDING",
-          })
-          .update({
-            status: "PAID",
-            paymentStatus: "PAID",
-          });
-
-      if (!claimedPurchase) {
+    const result =
+      await db.transaction(async (tx) => {
         /*
-         * Un altro webhook ha già processato
-         * questo acquisto.
+         * ─────────────────────────────────────────
+         * DEDUPLICAZIONE
+         * ─────────────────────────────────────────
          */
 
+        const existingEvents =
+          await tx.orm.public.PaymosWebhookEvent
+            .where({
+              eventId,
+            })
+            .all();
+
+        if (existingEvents.length > 0) {
+          return {
+            duplicate: true,
+            processed: true,
+          };
+        }
+
+        /*
+         * Registriamo l'evento.
+         */
+
+        await tx.orm.public.PaymosWebhookEvent.create({
+          eventId,
+          eventType,
+        });
+
+        /*
+         * Gestiamo solamente gli eventi
+         * di pagamento finale.
+         */
+
+        if (
+          eventType !== "invoice.paid" &&
+          eventType !== "invoice.paid_over"
+        ) {
+          return {
+            duplicate: false,
+            processed: false,
+          };
+        }
+
+        const data =
+          payload.data;
+
+        if (!data) {
+          throw new Error(
+            "PAYMOS_DATA_MISSING"
+          );
+        }
+
+        /*
+         * Il pagamento deve essere:
+         *
+         * status = paid
+         * is_final = true
+         */
+
+        if (
+          data.status !== "paid" ||
+          data.is_final !== true
+        ) {
+          return {
+            duplicate: false,
+            processed: false,
+          };
+        }
+
+        /*
+         * external_id identifica il TokenPurchase.
+         */
+
+        const externalOrderId =
+          data.order?.external_id;
+
+        if (!externalOrderId) {
+          throw new Error(
+            "PAYMOS_EXTERNAL_ID_MISSING"
+          );
+        }
+
+        /*
+         * Recuperiamo l'acquisto.
+         */
+
+        const purchases =
+          await tx.orm.public.TokenPurchase
+            .where({
+              paymosOrderId:
+                externalOrderId,
+            })
+            .all();
+
+        const purchase =
+          purchases[0];
+
+        if (!purchase) {
+          throw new Error(
+            "TOKEN_PURCHASE_NOT_FOUND"
+          );
+        }
+
+        /*
+         * Verifica importo EUR.
+         */
+
+        const orderAmount =
+          Number(
+            data.order?.amount
+          );
+
+        const purchaseAmount =
+          Number(
+            purchase.amount
+          );
+
+        const orderCurrency =
+          data.order?.currency;
+
+        if (
+          !Number.isFinite(
+            orderAmount
+          ) ||
+          !Number.isFinite(
+            purchaseAmount
+          ) ||
+          orderCurrency !== "EUR" ||
+          Math.abs(
+            orderAmount -
+              purchaseAmount
+          ) > 0.01
+        ) {
+          throw new Error(
+            "PAYMOS_AMOUNT_MISMATCH"
+          );
+        }
+
+        /*
+         * ─────────────────────────────────────────
+         * CLAIM DELL'ACQUISTO
+         * ─────────────────────────────────────────
+         */
+
+        const claimedPurchase =
+          await tx.orm.public.TokenPurchase
+            .where({
+              id: purchase.id,
+              status: "PENDING",
+            })
+            .update({
+              status: "PAID",
+              paymentStatus: "PAID",
+            });
+
+        if (!claimedPurchase) {
+          return {
+            duplicate: false,
+            processed: true,
+            alreadyPaid: true,
+            purchaseId:
+              purchase.id,
+            tokens:
+              purchase.tokens,
+          };
+        }
+
+        /*
+         * ─────────────────────────────────────────
+         * UTENTE
+         * ─────────────────────────────────────────
+         */
+
+        const user =
+          await tx.orm.public.User
+            .where({
+              id: purchase.userId,
+            })
+            .first();
+
+        if (!user) {
+          throw new Error(
+            "USER_NOT_FOUND"
+          );
+        }
+
+        /*
+         * ─────────────────────────────────────────
+         * SYNC CREDIT
+         * ─────────────────────────────────────────
+         */
+
+        const syncCredit =
+          await tx.orm.public.SyncCredit
+            .where({
+              id: 1,
+            })
+            .first();
+
+        if (!syncCredit) {
+          throw new Error(
+            "SYNC_CREDIT_NOT_INITIALIZED"
+          );
+        }
+
+        /*
+         * Budget teorico del pacchetto.
+         *
+         * Esempio:
+         *
+         * 1 token  = $1.40
+         * 4 token  = $5.60
+         * 16 token = $22.40
+         */
+
+        const packageFunding =
+          purchase.tokens *
+          PPQCHECK_BUDGET_PER_TOKEN;
+
+        const currentCoverage =
+          Number(
+            syncCredit.ppqCoverage
+          );
+
+        const currentAmount =
+          Number(
+            syncCredit.ppqAmount
+          );
+
+        if (
+          !Number.isFinite(
+            currentCoverage
+          ) ||
+          !Number.isFinite(
+            currentAmount
+          )
+        ) {
+          throw new Error(
+            "INVALID_SYNC_CREDIT"
+          );
+        }
+
+        /*
+         * Se la coverage disponibile è già
+         * sufficiente, non serve aggiungere
+         * altro credito.
+         */
+
+        const additionalCredit =
+          Math.max(
+            0,
+            packageFunding -
+              currentCoverage
+          );
+
+        /*
+         * Nuovi valori contabili.
+         */
+
+        const newPpqAmount =
+          currentAmount +
+          additionalCredit;
+
+        const newPpqCoverage =
+          currentCoverage +
+          additionalCredit;
+
+        /*
+         * Aggiornamento atomico di SyncCredit.
+         */
+
+        const syncCreditUpdate =
+          tx.sql.public.syncCredit
+            .update((f, fns) => ({
+              ppqAmount:
+                fns.raw`${newPpqAmount.toFixed(2)}`
+                  .returns("pg/numeric@1"),
+
+              ppqCoverage:
+                fns.raw`${newPpqCoverage.toFixed(2)}`
+                  .returns("pg/numeric@1"),
+            }))
+            .where((f, fns) =>
+              fns.eq(
+                f.id,
+                syncCredit.id
+              )
+            )
+            .build();
+
+        await tx.execute(
+          syncCreditUpdate
+        );
+
+        /*
+         * ─────────────────────────────────────────
+         * TOKEN BALANCE
+         * ─────────────────────────────────────────
+         */
+
+        const incrementPlan =
+          tx.sql.public.user
+            .update((f, fns) => ({
+              tokenBalance:
+                fns.raw`${f.tokenBalance} + ${purchase.tokens}`
+                  .returns("pg/int4@1"),
+            }))
+            .where((f, fns) =>
+              fns.eq(
+                f.id,
+                purchase.userId
+              )
+            )
+            .build();
+
+        await tx.execute(
+          incrementPlan
+        );
+
+        /*
+         * ─────────────────────────────────────────
+         * TOKEN TRANSACTION
+         * ─────────────────────────────────────────
+         */
+
+        await tx.orm.public.TokenTransaction.create({
+          userId:
+            purchase.userId,
+
+          amount:
+            purchase.tokens,
+
+          type:
+            "PURCHASE",
+
+          purchaseId:
+            purchase.id,
+        });
+
+        console.log(
+          "Paymos webhook: acquisto processato",
+          {
+            eventId,
+            purchaseId:
+              purchase.id,
+            userId:
+              purchase.userId,
+            tokens:
+              purchase.tokens,
+            packageFunding,
+            additionalCredit,
+            ppqAmount:
+              newPpqAmount,
+            ppqCoverage:
+              newPpqCoverage,
+          }
+        );
+
         return {
           duplicate: false,
           processed: true,
-          alreadyPaid: true,
-          purchaseId: purchase.id,
-          tokens: purchase.tokens,
+          alreadyPaid: false,
+
+          purchaseId:
+            purchase.id,
+
+          tokens:
+            purchase.tokens,
+
+          packageFunding,
+
+          additionalCredit,
         };
-      }
-
-      /*
-       * Verifichiamo che l'utente esista.
-       */
-
-      const users =
-        await tx.orm.public.User
-          .where({
-            id: purchase.userId,
-          })
-          .all();
-
-      const user = users[0];
-
-      if (!user) {
-        throw new Error(
-          `Paymos webhook: utente non trovato: ${purchase.userId}`
-        );
-      }
-
-      /*
-       * Incremento atomico del saldo token.
-       *
-       * Non facciamo:
-       *
-       * user.tokenBalance + purchase.tokens
-       *
-       * perché due acquisti contemporanei potrebbero
-       * leggere lo stesso saldo.
-       *
-       * PostgreSQL esegue invece:
-       *
-       * tokenBalance = tokenBalance + N
-       *
-       * direttamente sul database.
-       */
-
-      const incrementPlan =
-  tx.sql.public.user
-    .update((f, fns) => ({
-      tokenBalance:
-        fns.raw`${f.tokenBalance} + ${purchase.tokens}`
-          .returns("pg/int4@1"),
-    }))
-    .where((f, fns) =>
-      fns.eq(f.id, purchase.userId)
-    )
-    .returning("id", "tokenBalance")
-    .build();
-
-await tx.execute(incrementPlan);
-
-      /*
-       * Registriamo la transazione contabile.
-       *
-       * purchaseId è UNIQUE nel database.
-       */
-
-      await tx.orm.public.TokenTransaction.create({
-        userId: purchase.userId,
-        amount: purchase.tokens,
-        type: "PURCHASE",
-        purchaseId: purchase.id,
       });
 
-      console.log(
-        "Paymos webhook: token accreditati",
-        {
-          eventId,
-          purchaseId: purchase.id,
-          userId: purchase.userId,
-          tokens: purchase.tokens,
-        }
-      );
-
-      return {
-        duplicate: false,
-        processed: true,
-        alreadyPaid: false,
-        purchaseId: purchase.id,
-        tokens: purchase.tokens,
-      };
-    });
-
     /*
-     * Risposta per evento duplicato.
+     * ─────────────────────────────────────────────
+     * RISPOSTA
+     * ─────────────────────────────────────────────
      */
 
     if (result.duplicate) {
@@ -496,11 +587,6 @@ await tx.execute(incrementPlan);
       });
     }
 
-    /*
-     * Evento verificato ma non rilevante
-     * per l'accredito dei token.
-     */
-
     if (!result.processed) {
       return NextResponse.json({
         received: true,
@@ -509,31 +595,29 @@ await tx.execute(incrementPlan);
       });
     }
 
-    /*
-     * Acquisto già processato.
-     */
-
     if (result.alreadyPaid) {
       return NextResponse.json({
         received: true,
         verified: true,
         processed: true,
         alreadyPaid: true,
-        purchaseId: result.purchaseId,
-        tokens: result.tokens,
+        purchaseId:
+          result.purchaseId,
+        tokens:
+          result.tokens,
       });
     }
-
-    /*
-     * Accredito completato.
-     */
 
     return NextResponse.json({
       received: true,
       verified: true,
       processed: true,
-      purchaseId: result.purchaseId,
-      tokens: result.tokens,
+      purchaseId:
+        result.purchaseId,
+      tokens:
+        result.tokens,
+      additionalCredit:
+        result.additionalCredit,
     });
   } catch (error) {
     console.error(
@@ -541,8 +625,67 @@ await tx.execute(incrementPlan);
       error
     );
 
+    if (
+      error instanceof Error &&
+      error.message ===
+        "PAYMOS_AMOUNT_MISMATCH"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Importo o valuta non corrispondenti",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (
+      error instanceof Error &&
+      error.message ===
+        "TOKEN_PURCHASE_NOT_FOUND"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Acquisto non trovato",
+        },
+        { status: 404 }
+      );
+    }
+
+    if (
+      error instanceof Error &&
+      error.message ===
+        "SYNC_CREDIT_NOT_INITIALIZED"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Sistema di credito PPQCheck non inizializzato",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (
+      error instanceof Error &&
+      error.message ===
+        "INVALID_SYNC_CREDIT"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Credito PPQCheck non valido",
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(
-      { error: "Errore interno" },
+      {
+        error:
+          "Errore interno",
+      },
       { status: 500 }
     );
   }
