@@ -14,7 +14,7 @@ export async function sendVerificationEmail({
   const appUrl =
   process.env.NEXT_PUBLIC_APP_URL ??
   (process.env.NODE_ENV === "production"
-    ? "https://onlysign.vercel.app"
+    ? "https://onlysign.app"
     : "http://localhost:3000");
 
   const verificationUrl =
@@ -170,7 +170,7 @@ export async function sendPasswordChangeEmail({
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
     (process.env.NODE_ENV === "production"
-      ? "https://onlysign.vercel.app"
+      ? "https://onlysign.app"
       : "http://localhost:3000");
 
   const verificationUrl =
@@ -235,7 +235,7 @@ export async function sendAccountDeletionEmail({
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
     (process.env.NODE_ENV === "production"
-      ? "https://onlysign.vercel.app"
+      ? "https://onlysign.app"
       : "http://localhost:3000");
 
   const deletionUrl =

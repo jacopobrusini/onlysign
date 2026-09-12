@@ -429,7 +429,7 @@ function createFinalPayloads(): PlistValue[] {
 
       URL:
         process.env.NEXT_PUBLIC_APP_URL ??
-        "https://onlysign.vercel.app",
+        "https://onlysign.app",
     },
   ];
 }
