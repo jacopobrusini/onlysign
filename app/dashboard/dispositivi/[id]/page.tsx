@@ -1,4 +1,5 @@
 import DeleteDeviceButton from "./DeleteDeviceButton";
+import PurchaseCertificateButton from "./PurchaseCertificateButton";
 import Link from "next/link";
 import Header from "@/components/Header";
 import { getSession } from "@/lib/session";
@@ -206,21 +207,18 @@ style={{ backgroundImage: "url('/background.png')" }}
                   </div>
 
                   <div className="flex shrink-0 flex-col gap-3 sm:items-end">
-                    <div className="text-sm text-white/50">
-                      {certificate.tokens}{" "}
-                      {certificate.tokens === 1
-                        ? "token"
-                        : "token"}
-                    </div>
+  <div className="text-sm text-white/50">
+    {certificate.tokens}{" "}
+    {certificate.tokens === 1
+      ? "token"
+      : "token"}
+  </div>
 
-                    <button
-                      type="button"
-                      disabled
-                      className="rounded-xl bg-white/10 px-5 py-3 text-sm font-medium text-white/40"
-                    >
-                      Acquista certificato
-                    </button>
-                  </div>
+  <PurchaseCertificateButton
+    deviceId={device.id}
+    certificateTypeId={certificate.id}
+  />
+</div>
                 </div>
               </div>
             ))}
