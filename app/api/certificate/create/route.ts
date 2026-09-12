@@ -324,6 +324,28 @@ export async function POST(request: NextRequest) {
     const responseText =
       await ppqcheckResponse.text();
 
+    /*
+     * ─────────────────────────────────────────────
+     * DIAGNOSTICA PPQCHECK
+     * ─────────────────────────────────────────────
+     *
+     * Non logghiamo:
+     * - API key
+     * - password
+     * - file .p12
+     * - mobileprovision
+     * - eventuale base64 del certificato
+     */
+
+    console.log(
+      "PPQCheck create response:",
+      {
+        status: ppqcheckResponse.status,
+        ok: ppqcheckResponse.ok,
+        body: responseText,
+      }
+    );
+
     let ppqcheckData: PpqcheckCreateResponse = {};
 
     try {
@@ -332,10 +354,22 @@ export async function POST(request: NextRequest) {
     } catch {
       console.error(
         "PPQCheck: risposta non JSON",
-        ppqcheckResponse.status,
-        responseText
+        ppqcheckResponse.status
       );
     }
+
+    console.log(
+      "PPQCheck create order:",
+      {
+        id: ppqcheckData.id,
+        status: ppqcheckData.status,
+        price: ppqcheckData.price,
+        currency: ppqcheckData.currency,
+        requestedCurrency:
+          ppqcheckData.requestedCurrency,
+        fellBack: ppqcheckData.fellBack,
+      }
+    );
 
     if (!ppqcheckResponse.ok) {
       console.error(
@@ -392,6 +426,17 @@ export async function POST(request: NextRequest) {
       .update({
         ppqcheckOrderId,
       });
+
+    console.log(
+      "CertificateOrder linked to PPQCheck:",
+      {
+        orderId: reservation.orderId,
+        ppqcheckOrderId,
+        deviceId,
+        certificateTypeId,
+        tokens: requiredTokens,
+      }
+    );
 
     const status =
       getPpqcheckStatus(ppqcheckData.status);
