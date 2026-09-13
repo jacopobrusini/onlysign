@@ -363,7 +363,8 @@ async function getFundingTransaction(
 async function ensurePpqcheckFunding(
   operationAmount: number,
   externalOrderId: string,
-  purchaseId: number
+  purchaseId: number,
+  allowFailedFundingRetry = false
 ) {
   if (
     !Number.isFinite(
@@ -536,8 +537,21 @@ async function ensurePpqcheckFunding(
       metadata?.status ===
       "FAILED"
     ) {
-      throw new Error(
-        "PPQCHECK_FUNDING_PREVIOUSLY_FAILED"
+      if (
+        !allowFailedFundingRetry
+      ) {
+        throw new Error(
+          "PPQCHECK_FUNDING_PREVIOUSLY_FAILED"
+        );
+      }
+
+      console.log(
+        "Authorized PPQCheck funding retry:",
+        {
+          purchaseId,
+
+          externalOrderId,
+        }
       );
     }
   }
@@ -614,16 +628,16 @@ async function ensurePpqcheckFunding(
     );
   }
 
-console.log(
-  "Paymos PPQCheck funding:",
-  {
-    purchaseId,
+  console.log(
+    "Paymos PPQCheck funding:",
+    {
+      purchaseId,
 
-    fundingAmount,
+      fundingAmount,
 
-    externalOrderId,
-  }
-);
+      externalOrderId,
+    }
+  );
 
   let withdrawal:
     PaymosWithdrawalResponse;
@@ -1053,7 +1067,10 @@ export async function finalizeTokenPurchase(
 }
 
 export async function processPaidTokenPurchase(
-  purchaseId: number
+  purchaseId: number,
+  options?: {
+    allowFailedFundingRetry?: boolean;
+  }
 ) {
   const purchase =
     await db.orm.public.TokenPurchase
@@ -1068,6 +1085,10 @@ export async function processPaidTokenPurchase(
       "TOKEN_PURCHASE_NOT_FOUND"
     );
   }
+
+  const allowFailedFundingRetry =
+    options?.allowFailedFundingRetry ===
+    true;
 
   console.log(
     "Processing paid token purchase:",
@@ -1087,6 +1108,8 @@ export async function processPaidTokenPurchase(
 
       paymentStatus:
         purchase.paymentStatus,
+
+      allowFailedFundingRetry,
     }
   );
 
@@ -1106,9 +1129,53 @@ export async function processPaidTokenPurchase(
   }
 
   if (
-    purchase.paymentStatus !==
+    purchase.paymentStatus ===
+    "PAID_FUNDING_FAILED"
+  ) {
+    if (
+      !allowFailedFundingRetry
+    ) {
+      throw new Error(
+        "TOKEN_PURCHASE_FUNDING_FAILED"
+      );
+    }
+
+    await db.orm.public.TokenPurchase
+      .where({
+        id:
+          purchaseId,
+      })
+      .update({
+        paymentStatus:
+          "PAID_FUNDING",
+      });
+
+    console.log(
+      "Authorized funding retry: purchase moved to PAID_FUNDING",
+      {
+        purchaseId,
+      }
+    );
+  }
+
+  const currentPurchase =
+    await db.orm.public.TokenPurchase
+      .where({
+        id:
+          purchaseId,
+      })
+      .first();
+
+  if (!currentPurchase) {
+    throw new Error(
+      "TOKEN_PURCHASE_NOT_FOUND"
+    );
+  }
+
+  if (
+    currentPurchase.paymentStatus !==
       "PAID" &&
-    purchase.paymentStatus !==
+    currentPurchase.paymentStatus !==
       "PAID_FUNDING"
   ) {
     throw new Error(
@@ -1117,10 +1184,10 @@ export async function processPaidTokenPurchase(
   }
 
   const externalOrderId =
-    `onlysign_ppq_funding_${purchase.id}`;
+    `onlysign_ppq_funding_${currentPurchase.id}`;
 
   const operationAmount =
-    purchase.tokens *
+    currentPurchase.tokens *
     PPQCHECK_BUDGET_PER_TOKEN;
 
   const funding =
@@ -1129,7 +1196,9 @@ export async function processPaidTokenPurchase(
 
       externalOrderId,
 
-      purchase.id
+      currentPurchase.id,
+
+      allowFailedFundingRetry
     );
 
   if (
@@ -1139,7 +1208,8 @@ export async function processPaidTokenPurchase(
     console.log(
       "Paymos PPQCheck funding pending:",
       {
-        purchaseId,
+        purchaseId:
+          currentPurchase.id,
 
         fundingAmount:
           funding.fundingAmount,
@@ -1153,10 +1223,11 @@ export async function processPaidTokenPurchase(
       status:
         "PENDING" as const,
 
-      purchaseId,
+      purchaseId:
+        currentPurchase.id,
 
       tokens:
-        purchase.tokens,
+        currentPurchase.tokens,
 
       fundingAmount:
         funding.fundingAmount,
@@ -1168,7 +1239,7 @@ export async function processPaidTokenPurchase(
 
   const result =
     await finalizeTokenPurchase(
-      purchase.id
+      currentPurchase.id
     );
 
   return {
