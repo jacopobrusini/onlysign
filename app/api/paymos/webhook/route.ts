@@ -1,333 +1,339 @@
-import {
-  NextRequest,
-  NextResponse,
-} from "next/server";
-
+import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-
 import { db } from "@/prisma/db";
-
 import {
-  processPaidTokenPurchase,
   finalizeTokenPurchase,
   markFundingFailed,
+  processPaidTokenPurchase,
 } from "@/lib/sync-credit";
-
-const WEBHOOK_TOLERANCE_SECONDS =
-  300;
 
 type PaymosWebhookPayload = {
   event_id?: string;
-
   event_type?: string;
-
-  version?: number;
-
-  occurred_at?: number;
-
   data?: {
     invoice_id?: string;
-
     withdrawal_id?: string;
-
     status?: string;
-
     is_final?: boolean;
-
     is_test?: boolean;
-
     external_order_id?: string;
-
     order?: {
       external_id?: string;
-
       client_id?: string;
-
       amount?: string;
-
       currency?: string;
     };
-
     amount?: string;
-
     currency?: string;
-
     network?: string;
-
     destination_address?: string;
-
     tx_hash?: string;
   };
 };
 
-function safeEqual(
-  a: string,
-  b: string
-) {
-  const aBuffer =
-    Buffer.from(
-      a,
-      "utf8"
-    );
-
-  const bBuffer =
-    Buffer.from(
-      b,
-      "utf8"
-    );
-
-  if (
-    aBuffer.length !==
-    bBuffer.length
-  ) {
-    return false;
-  }
-
-  return crypto.timingSafeEqual(
-    aBuffer,
-    bBuffer
-  );
-}
+const WEBHOOK_TOLERANCE_SECONDS = 300;
 
 function verifyWebhookSignature(
-  signatureHeader: string,
   rawBody: string,
-  secret: string
+  signatureHeader: string | null
 ) {
-  const parts =
-    signatureHeader.split(
-      ","
-    );
-
-  let timestamp:
-    | string
-    | null = null;
-
-  const signatures:
-    string[] = [];
-
-  for (
-    const part of parts
-  ) {
-    const [
-      key,
-      value,
-    ] =
-      part.split(
-        "=",
-        2
-      );
-
-    if (
-      key === "t" &&
-      value
-    ) {
-      timestamp =
-        value;
-    }
-
-    if (
-      key === "v1" &&
-      value
-    ) {
-      signatures.push(
-        value
-      );
-    }
-  }
-
-  if (
-    !timestamp ||
-    signatures.length === 0
-  ) {
+  if (!signatureHeader) {
     return false;
   }
 
-  const timestampNumber =
-    Number(
-      timestamp
-    );
+  const parts = signatureHeader.split(",");
 
-  if (
-    !Number.isInteger(
-      timestampNumber
-    )
-  ) {
+  let timestamp: string | undefined;
+  let signature: string | undefined;
+
+  for (const part of parts) {
+    const [key, value] = part.split("=");
+
+    if (key === "t") {
+      timestamp = value;
+    }
+
+    if (key === "v1") {
+      signature = value;
+    }
+  }
+
+  if (!timestamp || !signature) {
     return false;
   }
 
-  const now =
-    Math.floor(
-      Date.now() / 1000
-    );
+  const timestampNumber = Number(timestamp);
+
+  if (!Number.isFinite(timestampNumber)) {
+    return false;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
 
   if (
-    Math.abs(
-      now -
-        timestampNumber
-    ) >
+    Math.abs(now - timestampNumber) >
     WEBHOOK_TOLERANCE_SECONDS
   ) {
     return false;
   }
 
+  const secret = process.env.PAYMOS_WEBHOOK_SECRET;
+
+  if (!secret) {
+    throw new Error("PAYMOS_WEBHOOK_SECRET_MISSING");
+  }
+
   const signedPayload =
     `${timestampNumber}.${rawBody}`;
 
-  const expectedSignature =
-    crypto
-      .createHmac(
-        "sha256",
-        secret
-      )
-      .update(
-        signedPayload
-      )
-      .digest("hex");
+  const expectedSignature = crypto
+    .createHmac("sha256", secret)
+    .update(signedPayload)
+    .digest("hex");
 
-  return signatures.some(
-    (signature) =>
-      safeEqual(
-        signature,
-        expectedSignature
-      )
+  const receivedBuffer = Buffer.from(
+    signature,
+    "utf8"
   );
+
+  const expectedBuffer = Buffer.from(
+    expectedSignature,
+    "utf8"
+  );
+
+  if (
+    receivedBuffer.length !==
+    expectedBuffer.length
+  ) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(
+    receivedBuffer,
+    expectedBuffer
+  );
+}
+
+async function webhookEventExists(
+  eventId: string
+) {
+  const events =
+    await db.orm.public.PaymosWebhookEvent
+      .where({
+        eventId,
+      })
+      .all();
+
+  return events.length > 0;
 }
 
 async function saveWebhookEvent(
   eventId: string,
   eventType: string
 ) {
-  const existing =
-    await db.orm.public.PaymosWebhookEvent
-      .where({
-        eventId,
-      })
-      .first();
-
-  if (existing) {
-    return false;
-  }
-
   await db.orm.public.PaymosWebhookEvent.create({
     eventId,
-
     eventType,
   });
-
-  return true;
 }
 
 async function handleInvoicePaid(
   payload: PaymosWebhookPayload
 ) {
-  const data =
-    payload.data;
+  const data = payload.data;
+
+  console.log(
+    "PAYMOS INVOICE EVENT:",
+    {
+      eventType: payload.event_type,
+      eventId: payload.event_id,
+      status: data?.status,
+      isFinal: data?.is_final,
+      invoiceId: data?.invoice_id,
+      externalOrderId:
+        data?.order?.external_id,
+      orderAmount:
+        data?.order?.amount,
+      orderCurrency:
+        data?.order?.currency,
+      amount:
+        data?.amount,
+      currency:
+        data?.currency,
+    }
+  );
 
   if (!data) {
-    throw new Error(
-      "PAYMOS_DATA_MISSING"
+    console.log(
+      "Paymos invoice ignored: missing data"
     );
-  }
 
-  if (
-    data.status !==
-      "paid" ||
-    data.is_final !==
-      true
-  ) {
     return {
       processed: false,
+      ignored: true,
+    };
+  }
+
+  const status = data.status;
+
+  const isFinalPayment =
+    status === "paid" ||
+    status === "paid_over";
+
+  if (
+    !isFinalPayment ||
+    data.is_final !== true
+  ) {
+    console.log(
+      "Paymos invoice ignored: payment not final",
+      {
+        status,
+        isFinal: data.is_final,
+      }
+    );
+
+    return {
+      processed: false,
+      ignored: true,
     };
   }
 
   const externalOrderId =
-    data.order
-      ?.external_id;
+    data.order?.external_id ??
+    data.external_order_id;
 
-  if (
-    !externalOrderId
-  ) {
-    throw new Error(
-      "PAYMOS_EXTERNAL_ID_MISSING"
+  if (!externalOrderId) {
+    console.error(
+      "Paymos invoice missing external_order_id",
+      {
+        invoiceId: data.invoice_id,
+      }
     );
+
+    return {
+      processed: false,
+      ignored: true,
+    };
   }
 
   const purchases =
     await db.orm.public.TokenPurchase
       .where({
-        paymosOrderId:
-          externalOrderId,
+        paymosOrderId: externalOrderId,
       })
       .all();
 
-  const purchase =
-    purchases[0];
+  const purchase = purchases[0];
 
   if (!purchase) {
-    throw new Error(
-      "TOKEN_PURCHASE_NOT_FOUND"
+    console.error(
+      "Paymos invoice purchase not found",
+      {
+        externalOrderId,
+      }
     );
+
+    return {
+      processed: false,
+      ignored: true,
+    };
   }
 
-  const orderAmount =
-    Number(
-      data.order?.amount
-    );
+  const expectedAmount = Number(
+    purchase.amount
+  );
 
-  const purchaseAmount =
-    Number(
-      purchase.amount
-    );
-
-  const orderCurrency =
-    data.order?.currency;
+  const receivedOrderAmount =
+    Number(data.order?.amount);
 
   if (
-    !Number.isFinite(
-      orderAmount
-    ) ||
-    !Number.isFinite(
-      purchaseAmount
-    ) ||
-    orderCurrency !==
-      "EUR" ||
+    !Number.isFinite(expectedAmount) ||
+    !Number.isFinite(receivedOrderAmount)
+  ) {
+    console.error(
+      "Paymos invoice amount invalid",
+      {
+        purchaseId: purchase.id,
+        expectedAmount,
+        receivedOrderAmount,
+      }
+    );
+
+    return {
+      processed: false,
+      ignored: true,
+    };
+  }
+
+  if (
     Math.abs(
-      orderAmount -
-        purchaseAmount
-    ) >
-      0.01
+      receivedOrderAmount -
+        expectedAmount
+    ) > 0.01
   ) {
-    throw new Error(
-      "PAYMOS_AMOUNT_MISMATCH"
+    console.error(
+      "Paymos invoice amount mismatch",
+      {
+        purchaseId: purchase.id,
+        expectedAmount,
+        receivedOrderAmount,
+      }
     );
+
+    return {
+      processed: false,
+      ignored: true,
+    };
   }
 
-  /*
-   * Claim dell'acquisto.
-   *
-   * Se è già PAID, non è un problema:
-   * potrebbe essere un retry necessario
-   * per completare un funding precedente.
-   */
+  const currency =
+    data.order?.currency ??
+    data.currency;
+
   if (
-    purchase.status ===
-    "PENDING"
+    currency &&
+    currency.toUpperCase() !== "EUR"
   ) {
+    console.error(
+      "Paymos invoice currency mismatch",
+      {
+        purchaseId: purchase.id,
+        currency,
+      }
+    );
+
+    return {
+      processed: false,
+      ignored: true,
+    };
+  }
+
+  if (
+    purchase.status !== "PENDING" &&
+    purchase.status !== "PAID"
+  ) {
+    console.log(
+      "Paymos invoice already handled",
+      {
+        purchaseId: purchase.id,
+        status: purchase.status,
+      }
+    );
+
+    return {
+      processed: true,
+      alreadyProcessed: true,
+    };
+  }
+
+  if (purchase.status === "PENDING") {
     await db.orm.public.TokenPurchase
       .where({
-        id:
-          purchase.id,
-
-        status:
-          "PENDING",
+        id: purchase.id,
       })
       .update({
-        status:
-          "PAID",
-
-        paymentStatus:
-          "PAID",
+        status: "PAID",
+        paymentStatus: "PAID",
       });
   }
 
@@ -339,19 +345,16 @@ async function handleInvoicePaid(
   console.log(
     "Paymos invoice processed",
     {
-      purchaseId:
-        purchase.id,
-
+      purchaseId: purchase.id,
+      externalOrderId,
+      invoiceId: data.invoice_id,
+      status,
       result,
     }
   );
 
   return {
     processed: true,
-
-    purchaseId:
-      purchase.id,
-
     result,
   };
 }
@@ -359,136 +362,152 @@ async function handleInvoicePaid(
 async function handleWithdrawal(
   payload: PaymosWebhookPayload
 ) {
-  const data =
-    payload.data;
+  const data = payload.data;
 
   if (!data) {
-    throw new Error(
-      "PAYMOS_DATA_MISSING"
-    );
-  }
-
-  const externalOrderId =
-    data.external_order_id;
-
-  if (
-    !externalOrderId
-  ) {
-    throw new Error(
-      "PAYMOS_WITHDRAWAL_EXTERNAL_ID_MISSING"
-    );
-  }
-
-  const prefix =
-    "onlysign_ppq_funding_";
-
-  if (
-    !externalOrderId.startsWith(
-      prefix
-    )
-  ) {
-    /*
-     * Withdrawal di altro tipo:
-     * non appartiene al sistema SyncCredit.
-     */
     return {
       processed: false,
       ignored: true,
     };
   }
 
-  const purchaseId =
-    Number(
-      externalOrderId.slice(
-        prefix.length
-      )
+  const externalOrderId =
+    data.order?.external_id ??
+    data.external_order_id;
+
+  if (!externalOrderId) {
+    console.log(
+      "Paymos withdrawal ignored: missing external_order_id"
     );
 
-  if (
-    !Number.isInteger(
-      purchaseId
-    ) ||
-    purchaseId <= 0
-  ) {
-    throw new Error(
-      "INVALID_FUNDING_PURCHASE_ID"
-    );
+    return {
+      processed: false,
+      ignored: true,
+    };
   }
 
   if (
-    data.status ===
-      "failed" ||
-    data.status ===
-      "cancelled"
+    !externalOrderId.startsWith(
+      "onlysign_ppq_funding_"
+    )
+  ) {
+    console.log(
+      "Paymos withdrawal ignored: unrelated order",
+      {
+        externalOrderId,
+      }
+    );
+
+    return {
+      processed: false,
+      ignored: true,
+    };
+  }
+
+  const purchaseId = Number(
+    externalOrderId.replace(
+      "onlysign_ppq_funding_",
+      ""
+    )
+  );
+
+  if (
+    !Number.isInteger(purchaseId) ||
+    purchaseId <= 0
+  ) {
+    console.error(
+      "Paymos withdrawal: invalid purchaseId",
+      {
+        externalOrderId,
+        purchaseId,
+      }
+    );
+
+    return {
+      processed: false,
+      ignored: true,
+    };
+  }
+
+  const status = data.status;
+
+  console.log(
+    "PAYMOS WITHDRAWAL EVENT:",
+    {
+      eventType: payload.event_type,
+      eventId: payload.event_id,
+      withdrawalId:
+        data.withdrawal_id,
+      status,
+      isFinal: data.is_final,
+      externalOrderId,
+      purchaseId,
+      txHash: data.tx_hash,
+    }
+  );
+
+  if (
+    status === "failed" ||
+    status === "cancelled"
   ) {
     await markFundingFailed(
       purchaseId
     );
 
+    console.error(
+      "Paymos PPQCheck funding failed",
+      {
+        purchaseId,
+        withdrawalId:
+          data.withdrawal_id,
+        status,
+      }
+    );
+
     return {
       processed: true,
-
       fundingFailed: true,
-
-      purchaseId,
-
-      withdrawalStatus:
-        data.status,
     };
   }
 
   if (
-    data.status !==
-      "completed" ||
-    data.is_final !==
-      true
+    status === "completed" &&
+    data.is_final === true
   ) {
-    /*
-     * created / processing / signed:
-     * non accreditiamo ancora nulla.
-     */
+    const result =
+      await finalizeTokenPurchase(
+        purchaseId
+      );
+
+    console.log(
+      "Paymos PPQCheck funding completed",
+      {
+        purchaseId,
+        withdrawalId:
+          data.withdrawal_id,
+        result,
+      }
+    );
+
     return {
-      processed: false,
-
-      pending: true,
-
-      purchaseId,
-
-      withdrawalStatus:
-        data.status,
+      processed: true,
+      result,
     };
   }
 
-  /*
-   * Il payout è completato.
-   *
-   * finalizeTokenPurchase() farà una
-   * verifica reale del saldo PPQCheck
-   * prima di accreditare i token.
-   */
-  const result =
-    await finalizeTokenPurchase(
-      purchaseId
-    );
-
   console.log(
-    "Paymos funding completed",
+    "Paymos PPQCheck withdrawal pending",
     {
       purchaseId,
-
       withdrawalId:
         data.withdrawal_id,
-
-      result,
+      status,
     }
   );
 
   return {
-    processed: true,
-
-    purchaseId,
-
-    result,
+    processed: false,
+    pending: true,
   };
 }
 
@@ -496,66 +515,28 @@ export async function POST(
   request: NextRequest
 ) {
   try {
-    const webhookSecret =
-      process.env
-        .PAYMOS_WEBHOOK_SECRET;
-
-    if (
-      !webhookSecret
-    ) {
-      console.error(
-        "Paymos webhook: PAYMOS_WEBHOOK_SECRET missing"
-      );
-
-      return NextResponse.json(
-        {
-          error:
-            "Webhook non configurato",
-        },
-        {
-          status: 500,
-        }
-      );
-    }
-
     const rawBody =
       await request.text();
 
-    const signatureHeader =
+    const signature =
       request.headers.get(
         "x-webhook-signature"
       );
 
-    if (
-      !signatureHeader
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Firma mancante",
-        },
-        {
-          status: 401,
-        }
-      );
-    }
-
-    const validSignature =
+    const isValid =
       verifyWebhookSignature(
-        signatureHeader,
-
         rawBody,
-
-        webhookSecret
+        signature
       );
 
-    if (
-      !validSignature
-    ) {
+    if (!isValid) {
+      console.error(
+        "Paymos webhook: invalid signature"
+      );
+
       return NextResponse.json(
         {
-          error:
-            "Firma non valida",
+          error: "Invalid signature",
         },
         {
           status: 401,
@@ -563,19 +544,15 @@ export async function POST(
       );
     }
 
-    let payload:
-      PaymosWebhookPayload;
+    let payload: PaymosWebhookPayload;
 
     try {
       payload =
-        JSON.parse(
-          rawBody
-        ) as PaymosWebhookPayload;
+        JSON.parse(rawBody) as PaymosWebhookPayload;
     } catch {
       return NextResponse.json(
         {
-          error:
-            "Payload non valido",
+          error: "Invalid JSON",
         },
         {
           status: 400,
@@ -584,22 +561,24 @@ export async function POST(
     }
 
     const eventId =
-      payload.event_id ??
-      request.headers.get(
-        "x-webhook-id"
-      );
+      payload.event_id;
 
     const eventType =
       payload.event_type;
 
-    if (
-      !eventId ||
-      !eventType
-    ) {
+    if (!eventId || !eventType) {
+      console.error(
+        "Paymos webhook: missing event metadata",
+        {
+          eventId,
+          eventType,
+        }
+      );
+
       return NextResponse.json(
         {
           error:
-            "Evento non valido",
+            "Missing event metadata",
         },
         {
           status: 400,
@@ -607,26 +586,22 @@ export async function POST(
       );
     }
 
-    /*
-     * Dedupe iniziale.
-     *
-     * NON registriamo ancora l'evento.
-     * Lo registriamo solamente dopo che
-     * il processing è andato a buon fine.
-     */
-    const existingEvent =
-      await db.orm.public.PaymosWebhookEvent
-        .where({
-          eventId,
-        })
-        .first();
+    const alreadyProcessed =
+      await webhookEventExists(
+        eventId
+      );
 
-    if (existingEvent) {
+    if (alreadyProcessed) {
+      console.log(
+        "Paymos webhook already processed",
+        {
+          eventId,
+          eventType,
+        }
+      );
+
       return NextResponse.json({
         received: true,
-
-        verified: true,
-
         duplicate: true,
       });
     }
@@ -634,17 +609,17 @@ export async function POST(
     let result:
       | {
           processed: boolean;
-
-          [key: string]:
-            unknown;
+          ignored?: boolean;
+          pending?: boolean;
+          alreadyProcessed?: boolean;
+          fundingFailed?: boolean;
+          result?: unknown;
         }
       | undefined;
 
     if (
-      eventType ===
-        "invoice.paid" ||
-      eventType ===
-        "invoice.paid_over"
+      eventType === "invoice.paid" ||
+      eventType === "invoice.paid_over"
     ) {
       result =
         await handleInvoicePaid(
@@ -667,48 +642,41 @@ export async function POST(
           payload
         );
     } else {
-      /*
-       * Evento Paymos non rilevante
-       * per questa fase.
-       */
+      console.log(
+        "Paymos webhook ignored: unsupported event",
+        {
+          eventId,
+          eventType,
+        }
+      );
+
       result = {
         processed: false,
-
         ignored: true,
       };
     }
 
-    /*
-     * Registriamo l'evento solamente ora.
-     *
-     * Se una delle operazioni sopra fallisce,
-     * viene restituito 500 e Paymos può
-     * ritentare.
-     */
-    await saveWebhookEvent(
-      eventId,
-
-      eventType
-    );
+    if (
+      result.processed ||
+      result.ignored
+    ) {
+      await saveWebhookEvent(
+        eventId,
+        eventType
+      );
+    }
 
     console.log(
       "=== PAYMOS WEBHOOK PROCESSED ===",
       {
         eventId,
-
         eventType,
-
         result,
       }
     );
 
     return NextResponse.json({
       received: true,
-
-      verified: true,
-
-      duplicate: false,
-
       ...result,
     });
   } catch (error) {
@@ -717,62 +685,9 @@ export async function POST(
       error
     );
 
-    if (
-      error instanceof Error
-    ) {
-      switch (
-        error.message
-      ) {
-        case "PAYMOS_AMOUNT_MISMATCH":
-          return NextResponse.json(
-            {
-              error:
-                "Importo o valuta non corrispondenti",
-            },
-            {
-              status: 400,
-            }
-          );
-
-        case "TOKEN_PURCHASE_NOT_FOUND":
-          return NextResponse.json(
-            {
-              error:
-                "Acquisto non trovato",
-            },
-            {
-              status: 404,
-            }
-          );
-
-        case "PPQCHECK_BELOW_COVERAGE":
-          return NextResponse.json(
-            {
-              error:
-                "PPQCheck sotto coverage",
-            },
-            {
-              status: 500,
-            }
-          );
-
-        case "PPQCHECK_FUNDING_NOT_VISIBLE":
-          return NextResponse.json(
-            {
-              error:
-                "Funding PPQCheck non ancora visibile",
-            },
-            {
-              status: 500,
-            }
-          );
-      }
-    }
-
     return NextResponse.json(
       {
-        error:
-          "Errore interno",
+        error: "Webhook processing failed",
       },
       {
         status: 500,

@@ -16,9 +16,17 @@ type PaymosInvoiceResponse = {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log(
+      "=== PAYMOS CREATE INVOICE START ==="
+    );
+
     const session = await getSession();
 
     if (!session) {
+      console.log(
+        "Paymos create invoice: unauthenticated request"
+      );
+
       return NextResponse.json(
         { error: "Non autenticato" },
         { status: 401 }
@@ -30,6 +38,10 @@ export async function POST(request: NextRequest) {
     try {
       body = await request.json();
     } catch {
+      console.error(
+        "Paymos create invoice: invalid JSON"
+      );
+
       return NextResponse.json(
         { error: "Richiesta non valida" },
         { status: 400 }
@@ -38,54 +50,102 @@ export async function POST(request: NextRequest) {
 
     const packageId = Number(body.packageId);
 
-    if (!Number.isInteger(packageId) || packageId <= 0) {
+    console.log(
+      "Paymos create invoice request:",
+      {
+        userId: session.user.id,
+        packageId,
+      }
+    );
+
+    if (
+      !Number.isInteger(packageId) ||
+      packageId <= 0
+    ) {
+      console.error(
+        "Paymos create invoice: invalid packageId",
+        {
+          packageId,
+        }
+      );
+
       return NextResponse.json(
         { error: "Pacchetto non valido" },
         { status: 400 }
       );
     }
 
-    const packages = await db.orm.public.TokenPackage
-      .where({
-        id: packageId,
-        active: true,
-      })
-      .all();
+    const packages =
+      await db.orm.public.TokenPackage
+        .where({
+          id: packageId,
+          active: true,
+        })
+        .all();
 
     const tokenPackage = packages[0];
 
     if (!tokenPackage) {
+      console.error(
+        "Paymos create invoice: package not found",
+        {
+          packageId,
+        }
+      );
+
       return NextResponse.json(
         { error: "Pacchetto non trovato" },
         { status: 404 }
       );
     }
 
-    const apiKey = process.env.PAYMOS_API_KEY;
-    const apiSecret = process.env.PAYMOS_API_SECRET;
-    const projectId = process.env.PAYMOS_PROJECT_ID;
+    const apiKey =
+      process.env.PAYMOS_API_KEY;
 
-    if (!apiKey || !apiSecret || !projectId) {
+    const apiSecret =
+      process.env.PAYMOS_API_SECRET;
+
+    const projectId =
+      process.env.PAYMOS_PROJECT_ID;
+
+    if (
+      !apiKey ||
+      !apiSecret ||
+      !projectId
+    ) {
       console.error(
         "Paymos: configurazione API incompleta"
       );
 
       return NextResponse.json(
-        { error: "Configurazione pagamento non disponibile" },
+        {
+          error:
+            "Configurazione pagamento non disponibile",
+        },
         { status: 500 }
       );
     }
 
-    const amount = Number(tokenPackage.price);
+    const amount =
+      Number(tokenPackage.price);
 
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
       console.error(
         "Paymos: prezzo pacchetto non valido",
-        tokenPackage.id
+        {
+          packageId: tokenPackage.id,
+          price: tokenPackage.price,
+        }
       );
 
       return NextResponse.json(
-        { error: "Prezzo pacchetto non valido" },
+        {
+          error:
+            "Prezzo pacchetto non valido",
+        },
         { status: 500 }
       );
     }
@@ -93,30 +153,59 @@ export async function POST(request: NextRequest) {
     const paymosOrderId =
       `onlysign_purchase_${crypto.randomUUID()}`;
 
-    const purchase = await db.orm.public.TokenPurchase.create({
-      userId: session.user.id,
-      packageId: tokenPackage.id,
-      tokens: tokenPackage.tokens,
-      amount: tokenPackage.price,
-      paymentId: paymosOrderId,
-      paymosOrderId,
-      status: "PENDING",
-    });
+    console.log(
+      "Paymos create invoice: creating purchase",
+      {
+        userId: session.user.id,
+        packageId: tokenPackage.id,
+        tokens: tokenPackage.tokens,
+        amount,
+        paymosOrderId,
+      }
+    );
 
-    const paymosBody = JSON.stringify({
-      project_id: projectId,
-      amount: amount.toFixed(2),
-      currency: "EUR",
-      external_order_id: paymosOrderId,
-      client_id: `user_${session.user.id}`,
-    });
+    const purchase =
+      await db.orm.public.TokenPurchase.create({
+        userId: session.user.id,
+        packageId: tokenPackage.id,
+        tokens: tokenPackage.tokens,
+        amount: tokenPackage.price,
+        paymentId: paymosOrderId,
+        paymosOrderId,
+        status: "PENDING",
+      });
 
-    const timestamp = Math.floor(Date.now() / 1000).toString();
+    console.log(
+      "Paymos TokenPurchase created:",
+      {
+        purchaseId: purchase.id,
+        userId: session.user.id,
+        packageId: tokenPackage.id,
+        tokens: tokenPackage.tokens,
+        amount: tokenPackage.price,
+        paymosOrderId,
+      }
+    );
 
-    const bodyHash = crypto
-      .createHash("sha256")
-      .update(paymosBody)
-      .digest("hex");
+    const paymosBody =
+      JSON.stringify({
+        project_id: projectId,
+        amount: amount.toFixed(2),
+        currency: "EUR",
+        external_order_id:
+          paymosOrderId,
+        client_id:
+          `user_${session.user.id}`,
+      });
+
+    const timestamp =
+      Math.floor(Date.now() / 1000).toString();
+
+    const bodyHash =
+      crypto
+        .createHash("sha256")
+        .update(paymosBody)
+        .digest("hex");
 
     const stringToSign = [
       timestamp,
@@ -126,42 +215,81 @@ export async function POST(request: NextRequest) {
       bodyHash,
     ].join("\n");
 
-    const signature = crypto
-      .createHmac("sha256", apiSecret)
-      .update(stringToSign)
-      .digest("base64");
+    const signature =
+      crypto
+        .createHmac(
+          "sha256",
+          apiSecret
+        )
+        .update(stringToSign)
+        .digest("base64");
 
-    const response = await fetch(PAYMOS_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization:
-          `HMAC-SHA256 ${apiKey}:${signature}`,
-        "X-Request-Timestamp": timestamp,
-        "Content-Type": "application/json",
-      },
-      body: paymosBody,
-    });
+    console.log(
+      "Paymos invoice request:",
+      {
+        purchaseId: purchase.id,
+        paymosOrderId,
+        amount: amount.toFixed(2),
+        currency: "EUR",
+        projectId,
+      }
+    );
 
-    const responseText = await response.text();
+    const response =
+      await fetch(PAYMOS_API_URL, {
+        method: "POST",
+        headers: {
+          Authorization:
+            `HMAC-SHA256 ${apiKey}:${signature}`,
+          "X-Request-Timestamp":
+            timestamp,
+          "Content-Type":
+            "application/json",
+        },
+        body: paymosBody,
+      });
 
-    let paymosResponse: PaymosInvoiceResponse = {};
+    const responseText =
+      await response.text();
+
+    console.log(
+      "Paymos invoice API response:",
+      {
+        purchaseId: purchase.id,
+        paymosOrderId,
+        status: response.status,
+        ok: response.ok,
+        body: responseText,
+      }
+    );
+
+    let paymosResponse:
+      PaymosInvoiceResponse = {};
 
     try {
       paymosResponse =
-        JSON.parse(responseText) as PaymosInvoiceResponse;
+        JSON.parse(
+          responseText
+        ) as PaymosInvoiceResponse;
     } catch {
       console.error(
         "Paymos: risposta non JSON",
-        response.status,
-        responseText
+        {
+          status: response.status,
+          body: responseText,
+        }
       );
     }
 
     if (!response.ok) {
       console.error(
         "Paymos invoice creation failed:",
-        response.status,
-        responseText
+        {
+          purchaseId: purchase.id,
+          paymosOrderId,
+          status: response.status,
+          response: responseText,
+        }
       );
 
       return NextResponse.json(
@@ -181,14 +309,24 @@ export async function POST(request: NextRequest) {
       paymosResponse.data?.payment_url ??
       paymosResponse.payment_url;
 
-    if (!invoiceId || !paymentUrl) {
+    if (
+      !invoiceId ||
+      !paymentUrl
+    ) {
       console.error(
         "Paymos: risposta incompleta",
-        paymosResponse
+        {
+          purchaseId: purchase.id,
+          paymosOrderId,
+          response: paymosResponse,
+        }
       );
 
       return NextResponse.json(
-        { error: "Risposta Paymos non valida" },
+        {
+          error:
+            "Risposta Paymos non valida",
+        },
         { status: 502 }
       );
     }
@@ -200,6 +338,27 @@ export async function POST(request: NextRequest) {
       .update({
         paymentId: invoiceId,
       });
+
+    console.log(
+      "Paymos invoice created successfully:",
+      {
+        purchaseId: purchase.id,
+        paymosOrderId,
+        invoiceId,
+        amount: amount.toFixed(2),
+        currency: "EUR",
+        paymentUrl,
+      }
+    );
+
+    console.log(
+      "=== PAYMOS CREATE INVOICE SUCCESS ===",
+      {
+        purchaseId: purchase.id,
+        invoiceId,
+        paymosOrderId,
+      }
+    );
 
     return NextResponse.json({
       success: true,
@@ -214,8 +373,12 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json(
-      { error: "Errore interno" },
-      { status: 500 }
+      {
+        error: "Errore interno",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }
