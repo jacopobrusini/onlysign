@@ -6,9 +6,6 @@ const PPQCHECK_API_BASE =
 const PPQCHECK_NETWORK =
   process.env.PPQCHECK_NETWORK;
 
-const PPQCHECK_USDT_ADDRESS =
-  process.env.PPQCHECK_USDT_ADDRESS;
-
 const PPQCHECK_API_KEY =
   process.env.PPQCHECK_API_KEY;
 
@@ -33,13 +30,26 @@ type FundingStatus =
   | "FAILED";
 
 type FundingMetadata = {
-  version: 2;
+  version: 3;
   status: FundingStatus;
   externalOrderId: string;
   amount: number;
   depositAddress: string;
+  depositId?: string;
+  depositNetwork?: string;
+  depositExpiresAt?: string;
   withdrawalId?: string;
   withdrawalStatus?: string;
+};
+
+type PpqcheckDepositResponse = {
+  id?: string;
+  address?: string;
+  amount_usdt?: number | string;
+  network?: string;
+  expiresAt?: string;
+  qr?: unknown;
+  [key: string]: unknown;
 };
 
 type PaymosWithdrawalResponse = {
@@ -95,7 +105,8 @@ function parseFundingDescription(
       parsed as Record<string, unknown>;
 
     if (
-      value.version !== 2 ||
+      (value.version !== 2 &&
+        value.version !== 3) ||
       typeof value.status !== "string" ||
       typeof value.externalOrderId !== "string" ||
       typeof value.amount !== "number" ||
@@ -226,8 +237,194 @@ export async function getSyncCredit() {
   return syncCredit;
 }
 
+async function createPpqcheckDeposit(
+  amount: number
+) {
+  const apiKey =
+    requireEnv(
+      "PPQCHECK_API_KEY",
+      PPQCHECK_API_KEY
+    );
+
+  const network =
+    requireEnv(
+      "PPQCHECK_NETWORK",
+      PPQCHECK_NETWORK
+    );
+
+  if (
+    !Number.isFinite(amount) ||
+    amount <= 0
+  ) {
+    throw new Error(
+      "INVALID_PPQCHECK_DEPOSIT_AMOUNT"
+    );
+  }
+
+  const body =
+    JSON.stringify({
+      amount,
+
+      network,
+    });
+
+  console.log(
+    "Creating PPQCheck USDT deposit:",
+    {
+      amount,
+
+      network,
+    }
+  );
+
+  const response =
+    await fetch(
+      `${PPQCHECK_API_BASE}/v1/integration/wallet/deposit-usdt`,
+      {
+        method: "POST",
+
+        headers: {
+          "X-API-Key":
+            apiKey,
+
+          "Content-Type":
+            "application/json",
+        },
+
+        body,
+
+        cache: "no-store",
+      }
+    );
+
+  const text =
+    await response.text();
+
+  let data: unknown;
+
+  try {
+    data =
+      JSON.parse(text);
+  } catch {
+    throw new Error(
+      `PPQCHECK_DEPOSIT_INVALID_RESPONSE:${text}`
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `PPQCHECK_DEPOSIT_FAILED:${response.status}:${JSON.stringify(data)}`
+    );
+  }
+
+  if (
+    typeof data !== "object" ||
+    data === null
+  ) {
+    throw new Error(
+      "PPQCHECK_DEPOSIT_INVALID_DATA"
+    );
+  }
+
+  const root =
+    data as Record<string, unknown>;
+
+  const depositData =
+    (
+      typeof root.data === "object" &&
+      root.data !== null
+    )
+      ? root.data as Record<string, unknown>
+      : root;
+
+  const id =
+    typeof depositData.id === "string"
+      ? depositData.id
+      : undefined;
+
+  const address =
+    typeof depositData.address === "string"
+      ? depositData.address
+      : undefined;
+
+  const depositNetwork =
+    typeof depositData.network === "string"
+      ? depositData.network
+      : undefined;
+
+  const expiresAt =
+    typeof depositData.expiresAt === "string"
+      ? depositData.expiresAt
+      : undefined;
+
+  const amountUsdt =
+    Number(
+      depositData.amount_usdt
+    );
+
+  if (!address) {
+    throw new Error(
+      "PPQCHECK_DEPOSIT_ADDRESS_MISSING"
+    );
+  }
+
+  if (
+    !Number.isFinite(
+      amountUsdt
+    )
+  ) {
+    throw new Error(
+      "PPQCHECK_DEPOSIT_AMOUNT_MISSING"
+    );
+  }
+
+  if (
+    Math.abs(
+      amountUsdt -
+        amount
+    ) >
+    0.000001
+  ) {
+    throw new Error(
+      `PPQCHECK_DEPOSIT_AMOUNT_MISMATCH:${amountUsdt}:${amount}`
+    );
+  }
+
+  console.log(
+    "PPQCheck USDT deposit created:",
+    {
+      id,
+
+      address,
+
+      amountUsdt,
+
+      network:
+        depositNetwork ??
+        network,
+
+      expiresAt,
+    }
+  );
+
+  return {
+    id,
+
+    address,
+
+    amountUsdt,
+
+    network:
+      depositNetwork ??
+      network,
+
+    expiresAt,
+  };
+}
+
 async function createPaymosWithdrawal(
   amount: number,
+  destinationAddress: string,
   externalOrderId: string
 ) {
   const gatewayUrl =
@@ -240,12 +437,6 @@ async function createPaymosWithdrawal(
     requireEnv(
       "PAYMOS_GATEWAY_SECRET",
       PAYMOS_GATEWAY_SECRET
-    );
-
-  const destinationAddress =
-    requireEnv(
-      "PPQCHECK_USDT_ADDRESS",
-      PPQCHECK_USDT_ADDRESS
     );
 
   const network =
@@ -269,6 +460,12 @@ async function createPaymosWithdrawal(
   ) {
     throw new Error(
       "INVALID_PAYMOS_WITHDRAWAL_AMOUNT"
+    );
+  }
+
+  if (!destinationAddress) {
+    throw new Error(
+      "INVALID_PAYMOS_DESTINATION_ADDRESS"
     );
   }
 
@@ -556,15 +753,33 @@ async function ensurePpqcheckFunding(
     }
   }
 
-  const depositAddress =
-    requireEnv(
-      "PPQCHECK_USDT_ADDRESS",
-      PPQCHECK_USDT_ADDRESS
+  let deposit;
+
+  try {
+    deposit =
+      await createPpqcheckDeposit(
+        fundingAmount
+      );
+  } catch (error) {
+    console.error(
+      "PPQCheck deposit creation failed:",
+      {
+        purchaseId,
+
+        fundingAmount,
+
+        externalOrderId,
+
+        error,
+      }
     );
+
+    throw error;
+  }
 
   const metadata:
     FundingMetadata = {
-    version: 2,
+    version: 3,
 
     status:
       "PENDING",
@@ -574,7 +789,17 @@ async function ensurePpqcheckFunding(
     amount:
       fundingAmount,
 
-    depositAddress,
+    depositAddress:
+      deposit.address,
+
+    depositId:
+      deposit.id,
+
+    depositNetwork:
+      deposit.network,
+
+    depositExpiresAt:
+      deposit.expiresAt,
   };
 
   const description =
@@ -636,6 +861,18 @@ async function ensurePpqcheckFunding(
       fundingAmount,
 
       externalOrderId,
+
+      depositId:
+        deposit.id,
+
+      depositAddress:
+        deposit.address,
+
+      depositNetwork:
+        deposit.network,
+
+      depositExpiresAt:
+        deposit.expiresAt,
     }
   );
 
@@ -646,6 +883,9 @@ async function ensurePpqcheckFunding(
     withdrawal =
       await createPaymosWithdrawal(
         fundingAmount,
+
+        deposit.address,
+
         externalOrderId
       );
   } catch (error) {
@@ -712,6 +952,18 @@ async function ensurePpqcheckFunding(
       withdrawalId,
 
       withdrawalStatus,
+
+      depositId:
+        deposit.id,
+
+      depositAddress:
+        deposit.address,
+
+      depositNetwork:
+        deposit.network,
+
+      depositExpiresAt:
+        deposit.expiresAt,
     }
   );
 
