@@ -181,7 +181,7 @@ async function getPpqcheckBalance() {
 }
 
 export async function getSyncCredit() {
-  const syncCredit =
+  let syncCredit =
     await db.orm.public.SyncCredit
       .where({
         id: 1,
@@ -189,8 +189,37 @@ export async function getSyncCredit() {
       .first();
 
   if (!syncCredit) {
-    throw new Error(
-      "SYNC_CREDIT_NOT_INITIALIZED"
+    console.log(
+      "SyncCredit not initialized. Creating id=1."
+    );
+
+    syncCredit =
+      await db.orm.public.SyncCredit.create({
+        id: 1,
+
+        ppqAmount:
+          "0",
+
+        ppqCoverage:
+          "0",
+      });
+
+    console.log(
+      "SyncCredit initialized:",
+      {
+        id:
+          syncCredit.id,
+
+        ppqAmount:
+          String(
+            syncCredit.ppqAmount
+          ),
+
+        ppqCoverage:
+          String(
+            syncCredit.ppqCoverage
+          ),
+      }
     );
   }
 
@@ -372,6 +401,28 @@ async function ensurePpqcheckFunding(
   const actualBalance =
     await getPpqcheckBalance();
 
+  console.log(
+    "PPQCheck funding calculation:",
+    {
+      purchaseId,
+
+      operationAmount,
+
+      currentCoverage,
+
+      targetCoverage,
+
+      actualBalance,
+
+      fundingNeeded:
+        Math.max(
+          0,
+          targetCoverage -
+            actualBalance
+        ),
+    }
+  );
+
   const fundingAmount =
     Math.max(
       0,
@@ -382,6 +433,17 @@ async function ensurePpqcheckFunding(
   if (
     fundingAmount <= 0
   ) {
+    console.log(
+      "PPQCheck funding not required:",
+      {
+        purchaseId,
+
+        targetCoverage,
+
+        actualBalance,
+      }
+    );
+
     return {
       status:
         "COMPLETED" as const,
@@ -552,6 +614,17 @@ async function ensurePpqcheckFunding(
     );
   }
 
+console.log(
+  "Paymos PPQCheck funding:",
+  {
+    purchaseId,
+
+    fundingAmount,
+
+    externalOrderId,
+  }
+);
+
   let withdrawal:
     PaymosWithdrawalResponse;
 
@@ -615,6 +688,19 @@ async function ensurePpqcheckFunding(
         ),
     });
 
+  console.log(
+    "Paymos PPQCheck funding withdrawal created:",
+    {
+      purchaseId,
+
+      fundingAmount,
+
+      withdrawalId,
+
+      withdrawalStatus,
+    }
+  );
+
   return {
     status:
       "PENDING" as const,
@@ -642,6 +728,18 @@ async function waitForPpqcheckCoverage(
   ) {
     const balance =
       await getPpqcheckBalance();
+
+    console.log(
+      "PPQCheck balance poll:",
+      {
+        attempt:
+          attempt + 1,
+
+        targetCoverage,
+
+        balance,
+      }
+    );
 
     if (
       balance >=
@@ -739,6 +837,22 @@ export async function finalizeTokenPurchase(
   const targetCoverage =
     currentCoverage +
     operationAmount;
+
+  console.log(
+    "Finalizing token purchase:",
+    {
+      purchaseId,
+
+      tokens:
+        purchase.tokens,
+
+      operationAmount,
+
+      currentCoverage,
+
+      targetCoverage,
+    }
+  );
 
   const ppqBalance =
     await waitForPpqcheckCoverage(
@@ -850,8 +964,8 @@ export async function finalizeTokenPurchase(
         tx.sql.public.user
           .update((f, fns) => ({
             tokenBalance:
-  fns.raw`${f.tokenBalance} + ${currentPurchase.tokens}`
-    .returns("pg/int4@1"),
+              fns.raw`${f.tokenBalance} + ${currentPurchase.tokens}`
+                .returns("pg/int4@1"),
           }))
           .where((f, fns) =>
             fns.eq(
@@ -889,6 +1003,24 @@ export async function finalizeTokenPurchase(
           paymentStatus:
             "PAID_FUNDED",
         });
+
+      console.log(
+        "Token purchase finalized:",
+        {
+          purchaseId:
+            currentPurchase.id,
+
+          userId:
+            currentPurchase.userId,
+
+          tokens:
+            currentPurchase.tokens,
+
+          newCoverage,
+
+          newAmount,
+        }
+      );
     }
   );
 
@@ -937,6 +1069,27 @@ export async function processPaidTokenPurchase(
     );
   }
 
+  console.log(
+    "Processing paid token purchase:",
+    {
+      purchaseId,
+
+      userId:
+        purchase.userId,
+
+      tokens:
+        purchase.tokens,
+
+      amount:
+        String(
+          purchase.amount
+        ),
+
+      paymentStatus:
+        purchase.paymentStatus,
+    }
+  );
+
   if (
     purchase.paymentStatus ===
     "PAID_FUNDED"
@@ -983,6 +1136,19 @@ export async function processPaidTokenPurchase(
     funding.status ===
     "PENDING"
   ) {
+    console.log(
+      "Paymos PPQCheck funding pending:",
+      {
+        purchaseId,
+
+        fundingAmount:
+          funding.fundingAmount,
+
+        withdrawalId:
+          funding.withdrawalId,
+      }
+    );
+
     return {
       status:
         "PENDING" as const,
@@ -1069,7 +1235,7 @@ export async function markFundingFailed(
   if (
     purchase &&
     purchase.paymentStatus ===
-      "PAID"
+    "PAID"
   ) {
     await db.orm.public.TokenPurchase
       .where({
