@@ -102,6 +102,23 @@
               }
             ]
           },
+          "PpqcheckFundingStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "PENDING",
+                "value": "PENDING"
+              },
+              {
+                "name": "COMPLETED",
+                "value": "COMPLETED"
+              },
+              {
+                "name": "FAILED",
+                "value": "FAILED"
+              }
+            ]
+          },
           "PpqcheckTransactionType": {
             "codecId": "pg/text@1",
             "members": [
@@ -918,10 +935,79 @@
                   "kind": "scalar"
                 }
               },
+              "externalOrderId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "fundingStatus": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "PpqcheckFundingStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "paymosWithdrawalId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "paymosWithdrawalStatus": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "ppqDepositAddress": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "ppqDepositAmount": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/numeric@1",
+                  "kind": "scalar"
+                }
+              },
+              "ppqDepositExpiresAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "ppqDepositId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "ppqDepositNetwork": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
@@ -989,8 +1075,35 @@
                 "description": {
                   "column": "description"
                 },
+                "externalOrderId": {
+                  "column": "externalOrderId"
+                },
+                "fundingStatus": {
+                  "column": "fundingStatus"
+                },
                 "id": {
                   "column": "id"
+                },
+                "paymosWithdrawalId": {
+                  "column": "paymosWithdrawalId"
+                },
+                "paymosWithdrawalStatus": {
+                  "column": "paymosWithdrawalStatus"
+                },
+                "ppqDepositAddress": {
+                  "column": "ppqDepositAddress"
+                },
+                "ppqDepositAmount": {
+                  "column": "ppqDepositAmount"
+                },
+                "ppqDepositExpiresAt": {
+                  "column": "ppqDepositExpiresAt"
+                },
+                "ppqDepositId": {
+                  "column": "ppqDepositId"
+                },
+                "ppqDepositNetwork": {
+                  "column": "ppqDepositNetwork"
                 },
                 "tokenPurchaseId": {
                   "column": "tokenPurchaseId"
@@ -2387,6 +2500,11 @@
             "ppqcheckTransaction": {
               "checks": [
                 {
+                  "expression": "\"fundingStatus\" IN ('PENDING', 'COMPLETED', 'FAILED')",
+                  "name": "ppqcheckTransaction_fundingStatus_check_d477ab2b",
+                  "prefix": "ppqcheckTransaction_fundingStatus_check"
+                },
+                {
                   "expression": "\"type\" IN ('CREDIT', 'CERTIFICATE_COST', 'REFUND', 'ADJUSTMENT')",
                   "name": "ppqcheckTransaction_type_check_e7713a7a",
                   "prefix": "ppqcheckTransaction_type_check"
@@ -2408,6 +2526,22 @@
                   "nativeType": "text",
                   "nullable": true
                 },
+                "externalOrderId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "fundingStatus": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "PpqcheckFundingStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
                 "id": {
                   "codecId": "pg/int4@1",
                   "default": {
@@ -2416,6 +2550,41 @@
                   },
                   "nativeType": "int4",
                   "nullable": false
+                },
+                "paymosWithdrawalId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "paymosWithdrawalStatus": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "ppqDepositAddress": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "ppqDepositAmount": {
+                  "codecId": "pg/numeric@1",
+                  "nativeType": "numeric",
+                  "nullable": true
+                },
+                "ppqDepositExpiresAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "ppqDepositId": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "ppqDepositNetwork": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 },
                 "tokenPurchaseId": {
                   "codecId": "pg/int4@1",
@@ -3014,6 +3183,14 @@
                 "CANCELLED"
               ]
             },
+            "PpqcheckFundingStatus": {
+              "kind": "valueSet",
+              "values": [
+                "PENDING",
+                "COMPLETED",
+                "FAILED"
+              ]
+            },
             "PpqcheckTransactionType": {
               "kind": "valueSet",
               "values": [
@@ -3046,7 +3223,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "f1d81a38c96b4604b0473f89236f1134db1835007f10ba5a058000c700a1de7c"
+    "storageHash": "8aeaa48b179a7ced864363fb1d844037518c534cdb08660fdf8b45c4db48f9ad"
   },
   "capabilities": {
     "postgres": {

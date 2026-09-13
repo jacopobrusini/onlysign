@@ -1,111 +1,173 @@
 // use prisma-next
 
 model User {
+
   id              Int       @id @default(autoincrement())
+
   username        String    @unique
+
   email           String    @unique
+
   passwordHash    String
+
   emailVerified   Boolean   @default(false)
+
   tokenBalance    Int       @default(0)
+
   role            String    @default("USER")
 
   emailVerificationTokens EmailVerificationToken[]
+
   passwordChangeTokens    PasswordChangeToken[]
+
   accountDeletionTokens   AccountDeletionToken[]
 
   devices                  Device[]
+
   deviceRegistrationTokens DeviceRegistration[]
+
   sessions                 Session[]
 
   tokenPurchases           TokenPurchase[]
+
   tokenTransactions        TokenTransaction[]
+
   certificateOrders        CertificateOrder[]
+
 }
 
 model EmailVerificationToken {
+
   id        Int      @id @default(autoincrement())
+
   tokenHash String   @unique
+
   userId    Int
+
   expiresAt DateTime
 
   user User @relation(fields: [userId], references: [id])
+
 }
 
 model Session {
+
   id               Int      @id @default(autoincrement())
+
   sessionTokenHash String   @unique
+
   userId           Int
+
   expiresAt        DateTime
 
   user User @relation(fields: [userId], references: [id])
+
 }
 
 model PasswordChangeToken {
+
   id           Int      @id @default(autoincrement())
+
   tokenHash    String   @unique
+
   userId       Int
+
   passwordHash String
+
   expiresAt    DateTime
 
   user User @relation(fields: [userId], references: [id])
+
 }
 
 model AccountDeletionToken {
+
   id        Int      @id @default(autoincrement())
+
   tokenHash String   @unique
+
   userId    Int
+
   expiresAt DateTime
 
   user User @relation(fields: [userId], references: [id])
+
 }
 
 model Device {
+
   id      Int    @id @default(autoincrement())
+
   userId  Int
+
   udid    String @unique
+
   product String
+
   build   String
 
   user User @relation(fields: [userId], references: [id])
 
   certificateOrders CertificateOrder[]
+
 }
 
 model DeviceRegistration {
+
   id        Int      @id @default(autoincrement())
+
   tokenHash String   @unique
+
   userId    Int
+
   expiresAt DateTime
 
   user User @relation(fields: [userId], references: [id])
+
 }
 
 model DeviceModelCache {
+
   product String @id
+
   model   String
+
   build   String
+
   version String
+
 }
 
 
 // ─────────────────────────────────────────────
+
 // TOKEN PACKAGES
+
 // ─────────────────────────────────────────────
 
 model TokenPackage {
+
   id                  Int     @id @default(autoincrement())
+
   name                String
+
   tokens              Int
+
   price               Decimal
+
   ppqcheckBudget      Decimal
+
   active              Boolean @default(true)
 
   purchases TokenPurchase[]
+
 }
 
 
 // ─────────────────────────────────────────────
+
 // TOKEN PURCHASES
+
 // ─────────────────────────────────────────────
 
 model TokenPurchase {
@@ -119,30 +181,37 @@ model TokenPurchase {
   tokens        Int
 
   // Prezzo del pacchetto in EUR
+
   amount        Decimal
 
   // Valuta scelta dall'utente su NOWPayments
+
   payCurrency   String?
 
   // Quantità della crypto richiesta da NOWPayments
+
   payAmount     Decimal?
 
   // Fee a carico dell'utente
+
   feeAmount     Decimal?
 
   // Valuta della fee
+
   feeCurrency   String?
 
   // ID univoco del pagamento restituito dal provider
-  paymentId     String   @unique
 
+  paymentId     String   @unique
 
   paymosOrderId String? @unique
 
   // Stato interno onlySign
+
   status        TokenPurchaseStatus
 
   // Ultimo stato ricevuto da NOWPayments
+
   paymentStatus String?
 
   user    User        @relation(fields: [userId], references: [id])
@@ -152,96 +221,155 @@ model TokenPurchase {
   transaction        TokenTransaction?
 
   ppqcheckTransaction PpqcheckTransaction?
+
 }
 
 model PaymosWebhookEvent {
+
   id        Int    @id @default(autoincrement())
+
   eventId   String @unique
+
   eventType String
+
 }
 
+
 // ─────────────────────────────────────────────
+
 // TOKEN TRANSACTIONS
+
 // ─────────────────────────────────────────────
 
 model TokenTransaction {
+
   id         Int                 @id @default(autoincrement())
+
   userId     Int
+
   amount     Int
+
   type       TokenTransactionType
+
   purchaseId Int?                @unique
+
   orderId    Int?                @unique
 
   user     User              @relation(fields: [userId], references: [id])
+
   purchase TokenPurchase?    @relation(fields: [purchaseId], references: [id])
+
   order    CertificateOrder? @relation(fields: [orderId], references: [id])
+
 }
 
 
 // ─────────────────────────────────────────────
+
 // CERTIFICATE TYPES
+
 // ─────────────────────────────────────────────
 
 model CertificateType {
+
   id                Int     @id @default(autoincrement())
+
   name              String
+
   tokens            Int
+
   validityDays      Int
+
   antiRevokeDays    Int?
+
   ppqcheckId        String  @unique
+
   ppqcheckCost      Decimal
-  active             Boolean @default(true)
+
+  active            Boolean @default(true)
 
   orders CertificateOrder[]
+
 }
 
 
 // ─────────────────────────────────────────────
+
 // CERTIFICATE ORDERS
+
 // ─────────────────────────────────────────────
 
 model CertificateOrder {
+
   id                 Int      @id @default(autoincrement())
+
   userId             Int
+
   deviceId            Int
+
   certificateTypeId  Int
+
   tokens             Int
+
   ppqcheckOrderId    String?  @unique
+
   status             CertificateOrderStatus
 
   user            User            @relation(fields: [userId], references: [id])
+
   device          Device          @relation(fields: [deviceId], references: [id])
+
   certificateType CertificateType @relation(fields: [certificateTypeId], references: [id])
 
   tokenTransaction    TokenTransaction?
+
   ppqcheckTransaction PpqcheckTransaction?
+
 }
 
 
 // ─────────────────────────────────────────────
+
 // ENUMS
+
 // ─────────────────────────────────────────────
 
 enum TokenPurchaseStatus {
+
   PENDING
+
   PAID
+
   FAILED
+
   CANCELLED
+
 }
 
 enum TokenTransactionType {
+
   PURCHASE
+
   CERTIFICATE
+
   REFUND
+
 }
 
 enum CertificateOrderStatus {
+
   PENDING
+
   PROCESSING
+
   WAITING_APPLE_APPROVED
+
   SUCCESS
+
   FAILED
+
   CANCELLED
+
 }
 
 model SyncCredit {
@@ -256,21 +384,50 @@ model SyncCredit {
 
 model PpqcheckTransaction {
 
-  id                  Int                      @id @default(autoincrement())
+  id                  Int      @id @default(autoincrement())
 
   type                PpqcheckTransactionType
 
   amount              Decimal
 
-  tokenPurchaseId     Int?                     @unique
+  tokenPurchaseId     Int?     @unique
 
-  certificateOrderId  Int?                     @unique
+  certificateOrderId  Int?     @unique
 
   description         String?
 
-  tokenPurchase       TokenPurchase?           @relation(fields: [tokenPurchaseId], references: [id])
+  fundingStatus       PpqcheckFundingStatus?
 
-  certificateOrder    CertificateOrder?        @relation(fields: [certificateOrderId], references: [id])
+  externalOrderId     String?
+
+  ppqDepositId        String?
+
+  ppqDepositAddress   String?
+
+  ppqDepositAmount    Decimal?
+
+  ppqDepositNetwork   String?
+
+  ppqDepositExpiresAt DateTime?
+
+  paymosWithdrawalId  String?
+
+  paymosWithdrawalStatus String?
+
+  tokenPurchase       TokenPurchase?    @relation(fields: [tokenPurchaseId], references: [id])
+
+  certificateOrder    CertificateOrder? @relation(fields: [certificateOrderId], references: [id])
+
+}
+
+enum PpqcheckFundingStatus {
+
+  PENDING
+
+  COMPLETED
+
+  FAILED
+
 }
 
 enum PpqcheckTransactionType {
@@ -282,4 +439,5 @@ enum PpqcheckTransactionType {
   REFUND
 
   ADJUSTMENT
+
 }

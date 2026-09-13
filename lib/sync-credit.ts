@@ -1,4 +1,5 @@
 import { db } from "@/prisma/db";
+import "temporal-polyfill/full/global";
 
 const PPQCHECK_API_BASE =
   "https://br.api-developer.dev";
@@ -24,34 +25,6 @@ const PPQCHECK_BALANCE_POLL_ATTEMPTS =
 const PPQCHECK_BALANCE_POLL_DELAY_MS =
   3000;
 
-type FundingStatus =
-  | "PENDING"
-  | "COMPLETED"
-  | "FAILED";
-
-type FundingMetadata = {
-  version: 3;
-  status: FundingStatus;
-  externalOrderId: string;
-  amount: number;
-  depositAddress: string;
-  depositId?: string;
-  depositNetwork?: string;
-  depositExpiresAt?: string;
-  withdrawalId?: string;
-  withdrawalStatus?: string;
-};
-
-type PpqcheckDepositResponse = {
-  id?: string;
-  address?: string;
-  amount_usdt?: number | string;
-  network?: string;
-  expiresAt?: string;
-  qr?: unknown;
-  [key: string]: unknown;
-};
-
 type PaymosWithdrawalResponse = {
   withdrawal_id?: string;
   status?: string;
@@ -75,50 +48,6 @@ function sleep(
   return new Promise((resolve) =>
     setTimeout(resolve, milliseconds)
   );
-}
-
-function getFundingDescription(
-  metadata: FundingMetadata
-) {
-  return JSON.stringify(metadata);
-}
-
-function parseFundingDescription(
-  description: string | null | undefined
-): FundingMetadata | null {
-  if (!description) {
-    return null;
-  }
-
-  try {
-    const parsed: unknown =
-      JSON.parse(description);
-
-    if (
-      typeof parsed !== "object" ||
-      parsed === null
-    ) {
-      return null;
-    }
-
-    const value =
-      parsed as Record<string, unknown>;
-
-    if (
-      (value.version !== 2 &&
-        value.version !== 3) ||
-      typeof value.status !== "string" ||
-      typeof value.externalOrderId !== "string" ||
-      typeof value.amount !== "number" ||
-      typeof value.depositAddress !== "string"
-    ) {
-      return null;
-    }
-
-    return value as unknown as FundingMetadata;
-  } catch {
-    return null;
-  }
 }
 
 async function getPpqcheckBalance() {
@@ -253,6 +182,15 @@ async function createPpqcheckDeposit(
     );
 
   if (
+    network.toLowerCase() !==
+    "binance"
+  ) {
+    throw new Error(
+      "UNSUPPORTED_PPQCHECK_NETWORK"
+    );
+  }
+
+  if (
     !Number.isFinite(amount) ||
     amount <= 0
   ) {
@@ -329,6 +267,15 @@ async function createPpqcheckDeposit(
   const root =
     data as Record<string, unknown>;
 
+  if (
+    root.code !== undefined &&
+    Number(root.code) !== 201
+  ) {
+    throw new Error(
+      `PPQCHECK_DEPOSIT_UNEXPECTED_CODE:${String(root.code)}`
+    );
+  }
+
   const depositData =
     (
       typeof root.data === "object" &&
@@ -362,6 +309,12 @@ async function createPpqcheckDeposit(
       depositData.amount_usdt
     );
 
+  if (!id) {
+    throw new Error(
+      "PPQCHECK_DEPOSIT_ID_MISSING"
+    );
+  }
+
   if (!address) {
     throw new Error(
       "PPQCHECK_DEPOSIT_ADDRESS_MISSING"
@@ -390,6 +343,19 @@ async function createPpqcheckDeposit(
     );
   }
 
+  const resolvedNetwork =
+    depositNetwork ??
+    network;
+
+  if (
+    resolvedNetwork.toLowerCase() !==
+    "binance"
+  ) {
+    throw new Error(
+      `PPQCHECK_DEPOSIT_UNSUPPORTED_NETWORK:${resolvedNetwork}`
+    );
+  }
+
   console.log(
     "PPQCheck USDT deposit created:",
     {
@@ -400,8 +366,7 @@ async function createPpqcheckDeposit(
       amountUsdt,
 
       network:
-        depositNetwork ??
-        network,
+        resolvedNetwork,
 
       expiresAt,
     }
@@ -415,8 +380,7 @@ async function createPpqcheckDeposit(
     amountUsdt,
 
     network:
-      depositNetwork ??
-      network,
+      resolvedNetwork,
 
     expiresAt,
   };
@@ -661,14 +625,9 @@ async function ensurePpqcheckFunding(
     );
 
   if (existing) {
-    const metadata =
-      parseFundingDescription(
-        existing.description
-      );
-
     if (
-      metadata &&
-      metadata.externalOrderId !==
+      existing.externalOrderId &&
+      existing.externalOrderId !==
         externalOrderId
     ) {
       throw new Error(
@@ -677,28 +636,31 @@ async function ensurePpqcheckFunding(
     }
 
     if (
-      metadata?.status ===
+      existing.fundingStatus ===
       "PENDING"
     ) {
       if (
-        metadata.withdrawalId
+        existing.paymosWithdrawalId
       ) {
         return {
           status:
             "PENDING" as const,
 
           fundingAmount:
-            metadata.amount,
+            Number(
+              existing.amount
+            ),
 
           targetCoverage,
 
           actualBalance,
 
           withdrawalId:
-            metadata.withdrawalId,
+            existing.paymosWithdrawalId,
 
           withdrawalStatus:
-            metadata.withdrawalStatus,
+            existing.paymosWithdrawalStatus ??
+            undefined,
         };
       }
 
@@ -708,7 +670,7 @@ async function ensurePpqcheckFunding(
     }
 
     if (
-      metadata?.status ===
+      existing.fundingStatus ===
       "COMPLETED"
     ) {
       return {
@@ -716,22 +678,26 @@ async function ensurePpqcheckFunding(
           "COMPLETED" as const,
 
         fundingAmount:
-          metadata.amount,
+          Number(
+            existing.amount
+          ),
 
         targetCoverage,
 
         actualBalance,
 
         withdrawalId:
-          metadata.withdrawalId,
+          existing.paymosWithdrawalId ??
+          undefined,
 
         withdrawalStatus:
-          metadata.withdrawalStatus,
+          existing.paymosWithdrawalStatus ??
+          undefined,
       };
     }
 
     if (
-      metadata?.status ===
+      existing.fundingStatus ===
       "FAILED"
     ) {
       if (
@@ -777,53 +743,75 @@ async function ensurePpqcheckFunding(
     throw error;
   }
 
-  const metadata:
-    FundingMetadata = {
-    version: 3,
+  const depositAmount =
+    deposit.amountUsdt;
 
-    status:
-      "PENDING",
+  const depositNetwork =
+    deposit.network;
+
+  if (
+    Math.abs(
+      depositAmount -
+        fundingAmount
+    ) >
+    0.000001
+  ) {
+    throw new Error(
+      "PPQCHECK_DEPOSIT_AMOUNT_MISMATCH"
+    );
+  }
+
+  if (
+    depositNetwork.toLowerCase() !==
+    "binance"
+  ) {
+    throw new Error(
+      "PPQCHECK_DEPOSIT_NETWORK_MISMATCH"
+    );
+  }
+
+  let transaction;
+
+  const transactionData = {
+    tokenPurchaseId:
+      purchaseId,
+
+    type:
+      "ADJUSTMENT" as const,
+
+    amount:
+      depositAmount.toFixed(2),
+
+    description:
+      "PPQCheck USDT funding",
+
+    fundingStatus:
+      "PENDING" as const,
 
     externalOrderId,
 
-    amount:
-      fundingAmount,
-
-    depositAddress:
-      deposit.address,
-
-    depositId:
+    ppqDepositId:
       deposit.id,
 
-    depositNetwork:
-      deposit.network,
+    ppqDepositAddress:
+      deposit.address,
 
-    depositExpiresAt:
-      deposit.expiresAt,
+    ppqDepositAmount:
+      depositAmount.toFixed(2),
+
+    ppqDepositNetwork:
+      depositNetwork,
+
+    ppqDepositExpiresAt:
+  deposit.expiresAt
+    ? Temporal.Instant.from(deposit.expiresAt)
+    : null,
   };
-
-  const description =
-    getFundingDescription(
-      metadata
-    );
-
-  let transaction;
 
   if (!existing) {
     transaction =
       await db.orm.public.PpqcheckTransaction.create(
-        {
-          tokenPurchaseId:
-            purchaseId,
-
-          type:
-            "ADJUSTMENT",
-
-          amount:
-            fundingAmount.toFixed(2),
-
-          description,
-        }
+        transactionData
       );
   } else {
     await db.orm.public.PpqcheckTransaction
@@ -831,12 +819,9 @@ async function ensurePpqcheckFunding(
         id:
           existing.id,
       })
-      .update({
-        amount:
-          fundingAmount.toFixed(2),
-
-        description,
-      });
+      .update(
+        transactionData
+      );
 
     transaction =
       await db.orm.public.PpqcheckTransaction
@@ -858,7 +843,9 @@ async function ensurePpqcheckFunding(
     {
       purchaseId,
 
-      fundingAmount,
+      fundingAmount:
+
+        depositAmount,
 
       externalOrderId,
 
@@ -869,7 +856,7 @@ async function ensurePpqcheckFunding(
         deposit.address,
 
       depositNetwork:
-        deposit.network,
+        depositNetwork,
 
       depositExpiresAt:
         deposit.expiresAt,
@@ -882,31 +869,21 @@ async function ensurePpqcheckFunding(
   try {
     withdrawal =
       await createPaymosWithdrawal(
-        fundingAmount,
+        depositAmount,
 
         deposit.address,
 
         externalOrderId
       );
   } catch (error) {
-    const failedMetadata:
-      FundingMetadata = {
-      ...metadata,
-
-      status:
-        "FAILED",
-    };
-
     await db.orm.public.PpqcheckTransaction
       .where({
         id:
           transaction.id,
       })
       .update({
-        description:
-          getFundingDescription(
-            failedMetadata
-          ),
+        fundingStatus:
+          "FAILED",
       });
 
     throw error;
@@ -918,17 +895,25 @@ async function ensurePpqcheckFunding(
   const withdrawalStatus =
     withdrawal.status;
 
-  const pendingMetadata:
-    FundingMetadata = {
-    ...metadata,
+  if (!withdrawalId) {
+    await db.orm.public.PpqcheckTransaction
+      .where({
+        id:
+          transaction.id,
+      })
+      .update({
+        fundingStatus:
+          "FAILED",
 
-    status:
-      "PENDING",
+        paymosWithdrawalStatus:
+          withdrawalStatus ??
+          null,
+      });
 
-    withdrawalId,
-
-    withdrawalStatus,
-  };
+    throw new Error(
+      "PAYMOS_WITHDRAWAL_ID_MISSING"
+    );
+  }
 
   await db.orm.public.PpqcheckTransaction
     .where({
@@ -936,10 +921,15 @@ async function ensurePpqcheckFunding(
         transaction.id,
     })
     .update({
-      description:
-        getFundingDescription(
-          pendingMetadata
-        ),
+      fundingStatus:
+        "PENDING",
+
+      paymosWithdrawalId:
+        withdrawalId,
+
+      paymosWithdrawalStatus:
+        withdrawalStatus ??
+        null,
     });
 
   console.log(
@@ -947,7 +937,8 @@ async function ensurePpqcheckFunding(
     {
       purchaseId,
 
-      fundingAmount,
+      fundingAmount:
+        depositAmount,
 
       withdrawalId,
 
@@ -960,7 +951,7 @@ async function ensurePpqcheckFunding(
         deposit.address,
 
       depositNetwork:
-        deposit.network,
+        depositNetwork,
 
       depositExpiresAt:
         deposit.expiresAt,
@@ -971,7 +962,8 @@ async function ensurePpqcheckFunding(
     status:
       "PENDING" as const,
 
-    fundingAmount,
+    fundingAmount:
+      depositAmount,
 
     targetCoverage,
 
@@ -1270,6 +1262,29 @@ export async function finalizeTokenPurchase(
             "PAID_FUNDED",
         });
 
+      const fundingTransaction =
+        await tx.orm.public.PpqcheckTransaction
+          .where({
+            tokenPurchaseId:
+              currentPurchase.id,
+
+            type:
+              "ADJUSTMENT",
+          })
+          .first();
+
+      if (fundingTransaction) {
+        await tx.orm.public.PpqcheckTransaction
+          .where({
+            id:
+              fundingTransaction.id,
+          })
+          .update({
+            fundingStatus:
+              "COMPLETED",
+          });
+      }
+
       console.log(
         "Token purchase finalized:",
         {
@@ -1516,35 +1531,14 @@ export async function markFundingFailed(
     );
   }
 
-  const metadata =
-    parseFundingDescription(
-      transaction.description
-    );
-
-  if (!metadata) {
-    throw new Error(
-      "PPQCHECK_FUNDING_METADATA_INVALID"
-    );
-  }
-
-  const failedMetadata:
-    FundingMetadata = {
-    ...metadata,
-
-    status:
-      "FAILED",
-  };
-
   await db.orm.public.PpqcheckTransaction
     .where({
       id:
         transaction.id,
     })
     .update({
-      description:
-        getFundingDescription(
-          failedMetadata
-        ),
+      fundingStatus:
+        "FAILED",
     });
 
   const purchase =
@@ -1557,8 +1551,12 @@ export async function markFundingFailed(
 
   if (
     purchase &&
-    purchase.paymentStatus ===
-    "PAID"
+    (
+      purchase.paymentStatus ===
+        "PAID" ||
+      purchase.paymentStatus ===
+        "PAID_FUNDING"
+    )
   ) {
     await db.orm.public.TokenPurchase
       .where({
