@@ -21,10 +21,17 @@ const PPQCHECK_BUDGET_PER_TOKEN =
   1.4;
 
 const PPQCHECK_BALANCE_POLL_ATTEMPTS =
-  20;
+  25;
 
-const PPQCHECK_BALANCE_POLL_DELAY_MS =
-  3000;
+const PPQCHECK_BALANCE_POLL_DELAYS_MS =
+  [
+    0,
+    3000,
+    5000,
+    8000,
+    12000,
+    15000,
+  ];
 
 type PaymosWithdrawalResponse = {
   withdrawal_id?: string;
@@ -101,14 +108,26 @@ async function getPpqcheckBalance() {
     );
   }
 
-  const balanceData =
+  const root =
     data as Record<string, unknown>;
+
+  const nestedData =
+    (
+      typeof root.data ===
+        "object" &&
+      root.data !== null
+    )
+      ? root.data as Record<string, unknown>
+      : root;
 
   const balance =
     Number(
-      balanceData.balance ??
-        balanceData.usdt_balance ??
-        balanceData.usdtBalance ??
+      nestedData.balance ??
+        nestedData.usdt_balance ??
+        nestedData.usdtBalance ??
+        root.balance ??
+        root.usdt_balance ??
+        root.usdtBalance ??
         0
     );
 
@@ -978,6 +997,8 @@ async function ensurePpqcheckFunding(
 async function waitForPpqcheckCoverage(
   targetCoverage: number
 ) {
+  let lastBalance = 0;
+
   for (
     let attempt = 0;
     attempt <
@@ -986,6 +1007,9 @@ async function waitForPpqcheckCoverage(
   ) {
     const balance =
       await getPpqcheckBalance();
+
+    lastBalance =
+      balance;
 
     console.log(
       "PPQCheck balance poll:",
@@ -1003,7 +1027,24 @@ async function waitForPpqcheckCoverage(
       balance >=
       targetCoverage
     ) {
-      return balance;
+      console.log(
+        "PPQCheck funding visible:",
+        {
+          targetCoverage,
+
+          balance,
+
+          attempt:
+            attempt + 1,
+        }
+      );
+
+      return {
+        visible:
+          true,
+
+        balance,
+      };
     }
 
     if (
@@ -1011,15 +1052,47 @@ async function waitForPpqcheckCoverage(
       PPQCHECK_BALANCE_POLL_ATTEMPTS -
         1
     ) {
+      const delay =
+        PPQCHECK_BALANCE_POLL_DELAYS_MS[
+          Math.min(
+            attempt + 1,
+            PPQCHECK_BALANCE_POLL_DELAYS_MS.length - 1
+          )
+        ];
+
+      console.log(
+        "Waiting before next PPQCheck balance poll:",
+        {
+          delayMs:
+            delay,
+        }
+      );
+
       await sleep(
-        PPQCHECK_BALANCE_POLL_DELAY_MS
+        delay
       );
     }
   }
 
-  throw new Error(
-    "PPQCHECK_FUNDING_NOT_VISIBLE"
+  console.log(
+    "PPQCheck funding not visible after polling window:",
+    {
+      targetCoverage,
+
+      lastBalance,
+
+      attempts:
+        PPQCHECK_BALANCE_POLL_ATTEMPTS,
+    }
   );
+
+  return {
+    visible:
+      false,
+
+    balance:
+      lastBalance,
+  };
 }
 
 export async function finalizeTokenPurchase(
@@ -1116,6 +1189,52 @@ export async function finalizeTokenPurchase(
     await waitForPpqcheckCoverage(
       targetCoverage
     );
+
+  if (
+    !ppqBalance.visible
+  ) {
+    console.log(
+      "PPQCheck funding still pending after polling window:",
+      {
+        purchaseId,
+
+        targetCoverage,
+
+        ppqBalance:
+          ppqBalance.balance,
+      }
+    );
+
+    if (
+      purchase.paymentStatus ===
+      "PAID"
+    ) {
+      await db.orm.public.TokenPurchase
+        .where({
+          id:
+            purchaseId,
+        })
+        .update({
+          paymentStatus:
+            "PAID_FUNDING",
+        });
+    }
+
+    return {
+      status:
+        "PENDING" as const,
+
+      purchaseId,
+
+      tokens:
+        purchase.tokens,
+
+      targetCoverage,
+
+      ppqBalance:
+        ppqBalance.balance,
+    };
+  }
 
   await db.transaction(
     async (tx) => {
@@ -1327,7 +1446,7 @@ export async function finalizeTokenPurchase(
 
     ppqBalance:
       Math.max(
-        ppqBalance,
+        ppqBalance.balance,
         finalBalance
       ),
   };
