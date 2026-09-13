@@ -1,5 +1,6 @@
-import { db } from "@/prisma/db";
 import "temporal-polyfill/full/global";
+
+import { db } from "@/prisma/db";
 
 const PPQCHECK_API_BASE =
   "https://br.api-developer.dev";
@@ -332,14 +333,11 @@ async function createPpqcheckDeposit(
   }
 
   if (
-    Math.abs(
-      amountUsdt -
-        amount
-    ) >
-    0.000001
+    amountUsdt <
+    amount
   ) {
     throw new Error(
-      `PPQCHECK_DEPOSIT_AMOUNT_MISMATCH:${amountUsdt}:${amount}`
+      `PPQCHECK_DEPOSIT_AMOUNT_TOO_LOW:${amountUsdt}:${amount}`
     );
   }
 
@@ -363,7 +361,11 @@ async function createPpqcheckDeposit(
 
       address,
 
-      amountUsdt,
+      requestedAmount:
+        amount,
+
+      returnedAmount:
+        amountUsdt,
 
       network:
         resolvedNetwork,
@@ -750,18 +752,6 @@ async function ensurePpqcheckFunding(
     deposit.network;
 
   if (
-    Math.abs(
-      depositAmount -
-        fundingAmount
-    ) >
-    0.000001
-  ) {
-    throw new Error(
-      "PPQCHECK_DEPOSIT_AMOUNT_MISMATCH"
-    );
-  }
-
-  if (
     depositNetwork.toLowerCase() !==
     "binance"
   ) {
@@ -780,7 +770,7 @@ async function ensurePpqcheckFunding(
       "ADJUSTMENT" as const,
 
     amount:
-      depositAmount.toFixed(2),
+      fundingAmount.toFixed(2),
 
     description:
       "PPQCheck USDT funding",
@@ -803,9 +793,11 @@ async function ensurePpqcheckFunding(
       depositNetwork,
 
     ppqDepositExpiresAt:
-  deposit.expiresAt
-    ? Temporal.Instant.from(deposit.expiresAt)
-    : null,
+      deposit.expiresAt
+        ? Temporal.Instant.from(
+            deposit.expiresAt
+          )
+        : null,
   };
 
   if (!existing) {
@@ -844,7 +836,9 @@ async function ensurePpqcheckFunding(
       purchaseId,
 
       fundingAmount:
+        fundingAmount,
 
+      ppqDepositReturnedAmount:
         depositAmount,
 
       externalOrderId,
@@ -869,7 +863,7 @@ async function ensurePpqcheckFunding(
   try {
     withdrawal =
       await createPaymosWithdrawal(
-        depositAmount,
+        fundingAmount,
 
         deposit.address,
 
@@ -938,6 +932,12 @@ async function ensurePpqcheckFunding(
       purchaseId,
 
       fundingAmount:
+        fundingAmount,
+
+      paymosAmount:
+        fundingAmount.toFixed(2),
+
+      ppqDepositReturnedAmount:
         depositAmount,
 
       withdrawalId,
@@ -963,7 +963,7 @@ async function ensurePpqcheckFunding(
       "PENDING" as const,
 
     fundingAmount:
-      depositAmount,
+      fundingAmount,
 
     targetCoverage,
 
