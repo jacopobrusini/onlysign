@@ -72,7 +72,7 @@ export default async function Dashboard() {
           </div>
 
           {/* Token */}
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Link
               href="/dashboard/token"
               className="block rounded-2xl border border-white/10 bg-black/20 p-6 shadow-xl backdrop-blur-xl transition hover:bg-white/5"
@@ -87,6 +87,23 @@ export default async function Dashboard() {
 
               <p className="mt-4 text-sm text-white/70">
                 Acquista token →
+              </p>
+            </Link>
+
+            <Link
+              href="/dashboard/token/success"
+              className="block rounded-2xl border border-white/10 bg-black/20 p-6 shadow-xl backdrop-blur-xl transition hover:bg-white/5"
+            >
+              <p className="text-sm text-white/50">
+                Ordini token
+              </p>
+
+              <p className="mt-2 text-2xl font-bold">
+                Verifica stato
+              </p>
+
+              <p className="mt-4 text-sm text-white/70">
+                Controlla i tuoi ordini →
               </p>
             </Link>
           </div>

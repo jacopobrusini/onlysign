@@ -180,6 +180,8 @@ model TokenPurchase {
 
   tokens        Int
 
+  createdAt     DateTime @default(now())
+
   // Prezzo del pacchetto in EUR
 
   amount        Decimal
@@ -218,7 +220,7 @@ model TokenPurchase {
 
   package TokenPackage @relation(fields: [packageId], references: [id])
 
-  transaction        TokenTransaction?
+  transaction         TokenTransaction?
 
   ppqcheckTransaction PpqcheckTransaction?
 

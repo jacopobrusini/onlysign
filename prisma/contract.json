@@ -1320,6 +1320,13 @@
                   "kind": "scalar"
                 }
               },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
               "feeAmount": {
                 "nullable": true,
                 "type": {
@@ -1477,6 +1484,9 @@
               "fields": {
                 "amount": {
                   "column": "amount"
+                },
+                "createdAt": {
+                  "column": "createdAt"
                 },
                 "feeAmount": {
                   "column": "feeAmount"
@@ -2827,6 +2837,15 @@
                   "nativeType": "numeric",
                   "nullable": false
                 },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
                 "feeAmount": {
                   "codecId": "pg/numeric@1",
                   "nativeType": "numeric",
@@ -3223,7 +3242,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "8aeaa48b179a7ced864363fb1d844037518c534cdb08660fdf8b45c4db48f9ad"
+    "storageHash": "a2e4bb8ed93adae0e64713f8f3895f52e52d5ba062f8f6b11bacab0eacb28c47"
   },
   "capabilities": {
     "postgres": {
