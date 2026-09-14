@@ -67,7 +67,7 @@ async function getPpqcheckBalance() {
 
   const response =
     await fetch(
-      `${PPQCHECK_API_BASE}/v1/integration/balance`,
+      `${PPQCHECK_API_BASE}/v1/integration/wallet/usdt-balance`,
       {
         method: "GET",
 
@@ -82,14 +82,6 @@ async function getPpqcheckBalance() {
   const text =
     await response.text();
 
-  console.log(
-    "PPQCHECK BALANCE RAW RESPONSE:",
-    {
-      status: response.status,
-      text,
-    }
-  );
-
   let data: unknown;
 
   try {
@@ -97,27 +89,22 @@ async function getPpqcheckBalance() {
       JSON.parse(text);
   } catch {
     throw new Error(
-      `PPQCHECK_BALANCE_INVALID_RESPONSE:${text}`
+      `PPQCHECK_USDT_BALANCE_INVALID_RESPONSE:${text}`
     );
   }
 
   if (!response.ok) {
     throw new Error(
-      `PPQCHECK_BALANCE_FAILED:${response.status}:${JSON.stringify(data)}`
+      `PPQCHECK_USDT_BALANCE_FAILED:${response.status}:${JSON.stringify(data)}`
     );
   }
-
-  console.log(
-    "PPQCHECK BALANCE JSON:",
-    JSON.stringify(data)
-  );
 
   if (
     typeof data !== "object" ||
     data === null
   ) {
     throw new Error(
-      "PPQCHECK_BALANCE_INVALID_DATA"
+      "PPQCHECK_USDT_BALANCE_INVALID_DATA"
     );
   }
 
@@ -132,35 +119,16 @@ async function getPpqcheckBalance() {
       ? root.data as Record<string, unknown>
       : root;
 
-  console.log(
-    "PPQCHECK BALANCE ROOT:",
-    root
-  );
-
-  console.log(
-    "PPQCHECK BALANCE NESTED DATA:",
-    nestedData
-  );
-
   const balance =
     Number(
-      nestedData.balance ??
-        nestedData.usdt_balance ??
-        nestedData.usdtBalance ??
-        root.balance ??
-        root.usdt_balance ??
-        root.usdtBalance ??
+      nestedData.availableBalance ??
+        nestedData.balance ??
         0
     );
 
-  console.log(
-    "PPQCHECK BALANCE PARSED:",
-    balance
-  );
-
   if (!Number.isFinite(balance)) {
     throw new Error(
-      "PPQCHECK_BALANCE_NOT_NUMERIC"
+      "PPQCHECK_USDT_BALANCE_NOT_NUMERIC"
     );
   }
 
