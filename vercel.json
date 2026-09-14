@@ -1,8 +1,7 @@
 {
-  "schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/app/api/cron/ppqcheck",
+      "path": "/api/cron/ppqcheck",
       "schedule": "*/2 * * * *"
     }
   ]
