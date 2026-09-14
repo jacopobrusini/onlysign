@@ -82,6 +82,14 @@ async function getPpqcheckBalance() {
   const text =
     await response.text();
 
+  console.log(
+    "PPQCHECK BALANCE RAW RESPONSE:",
+    {
+      status: response.status,
+      text,
+    }
+  );
+
   let data: unknown;
 
   try {
@@ -99,6 +107,11 @@ async function getPpqcheckBalance() {
     );
   }
 
+  console.log(
+    "PPQCHECK BALANCE JSON:",
+    JSON.stringify(data)
+  );
+
   if (
     typeof data !== "object" ||
     data === null
@@ -113,12 +126,21 @@ async function getPpqcheckBalance() {
 
   const nestedData =
     (
-      typeof root.data ===
-        "object" &&
+      typeof root.data === "object" &&
       root.data !== null
     )
       ? root.data as Record<string, unknown>
       : root;
+
+  console.log(
+    "PPQCHECK BALANCE ROOT:",
+    root
+  );
+
+  console.log(
+    "PPQCHECK BALANCE NESTED DATA:",
+    nestedData
+  );
 
   const balance =
     Number(
@@ -130,6 +152,11 @@ async function getPpqcheckBalance() {
         root.usdtBalance ??
         0
     );
+
+  console.log(
+    "PPQCHECK BALANCE PARSED:",
+    balance
+  );
 
   if (!Number.isFinite(balance)) {
     throw new Error(
@@ -184,6 +211,55 @@ export async function getSyncCredit() {
   }
 
   return syncCredit;
+}
+
+async function getPendingReservedFunding(
+  excludePurchaseId?: number
+) {
+  const pendingTransactions =
+    await db.orm.public.PpqcheckTransaction
+      .where({
+        type:
+          "ADJUSTMENT",
+
+        fundingStatus:
+          "PENDING",
+      })
+      .all();
+
+  let reservedAmount = 0;
+
+  for (
+    const transaction
+    of pendingTransactions
+  ) {
+    if (
+      excludePurchaseId !== undefined &&
+      transaction.tokenPurchaseId ===
+        excludePurchaseId
+    ) {
+      continue;
+    }
+
+    const amount =
+      Number(
+        transaction.amount
+      );
+
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
+      continue;
+    }
+
+    reservedAmount +=
+      amount;
+  }
+
+  return Number(
+    reservedAmount.toFixed(2)
+  );
 }
 
 async function createPpqcheckDeposit(
@@ -584,6 +660,25 @@ async function ensurePpqcheckFunding(
   const actualBalance =
     await getPpqcheckBalance();
 
+  const reservedFunding =
+    await getPendingReservedFunding(
+      purchaseId
+    );
+
+  const availableBalance =
+    Math.max(
+      0,
+      actualBalance -
+        reservedFunding
+    );
+
+  const fundingNeeded =
+    Math.max(
+      0,
+      operationAmount -
+        availableBalance
+    );
+
   console.log(
     "PPQCheck funding calculation:",
     {
@@ -597,33 +692,29 @@ async function ensurePpqcheckFunding(
 
       actualBalance,
 
-      fundingNeeded:
-        Math.max(
-          0,
-          targetCoverage -
-            actualBalance
-        ),
+      reservedFunding,
+
+      availableBalance,
+
+      fundingNeeded,
     }
   );
 
-  const fundingAmount =
-    Math.max(
-      0,
-      targetCoverage -
-        actualBalance
-    );
-
   if (
-    fundingAmount <= 0
+    fundingNeeded <= 0
   ) {
     console.log(
       "PPQCheck funding not required:",
       {
         purchaseId,
 
-        targetCoverage,
+        operationAmount,
 
         actualBalance,
+
+        reservedFunding,
+
+        availableBalance,
       }
     );
 
@@ -637,6 +728,10 @@ async function ensurePpqcheckFunding(
       targetCoverage,
 
       actualBalance,
+
+      reservedFunding,
+
+      availableBalance,
     };
   }
 
@@ -676,6 +771,10 @@ async function ensurePpqcheckFunding(
 
           actualBalance,
 
+          reservedFunding,
+
+          availableBalance,
+
           withdrawalId:
             existing.paymosWithdrawalId,
 
@@ -706,6 +805,10 @@ async function ensurePpqcheckFunding(
         targetCoverage,
 
         actualBalance,
+
+        reservedFunding,
+
+        availableBalance,
 
         withdrawalId:
           existing.paymosWithdrawalId ??
@@ -745,7 +848,7 @@ async function ensurePpqcheckFunding(
   try {
     deposit =
       await createPpqcheckDeposit(
-        fundingAmount
+        fundingNeeded
       );
   } catch (error) {
     console.error(
@@ -753,7 +856,7 @@ async function ensurePpqcheckFunding(
       {
         purchaseId,
 
-        fundingAmount,
+        fundingNeeded,
 
         externalOrderId,
 
@@ -789,7 +892,7 @@ async function ensurePpqcheckFunding(
       "ADJUSTMENT" as const,
 
     amount:
-      fundingAmount.toFixed(2),
+      fundingNeeded.toFixed(2),
 
     description:
       "PPQCheck USDT funding",
@@ -855,7 +958,7 @@ async function ensurePpqcheckFunding(
       purchaseId,
 
       fundingAmount:
-        fundingAmount,
+        fundingNeeded,
 
       ppqDepositReturnedAmount:
         depositAmount,
@@ -882,7 +985,7 @@ async function ensurePpqcheckFunding(
   try {
     withdrawal =
       await createPaymosWithdrawal(
-        fundingAmount,
+        fundingNeeded,
 
         deposit.address,
 
@@ -951,10 +1054,10 @@ async function ensurePpqcheckFunding(
       purchaseId,
 
       fundingAmount:
-        fundingAmount,
+        fundingNeeded,
 
       paymosAmount:
-        fundingAmount.toFixed(2),
+        fundingNeeded.toFixed(2),
 
       ppqDepositReturnedAmount:
         depositAmount,
@@ -982,11 +1085,15 @@ async function ensurePpqcheckFunding(
       "PENDING" as const,
 
     fundingAmount:
-      fundingAmount,
+      fundingNeeded,
 
     targetCoverage,
 
     actualBalance,
+
+    reservedFunding,
+
+    availableBalance,
 
     withdrawalId,
 
