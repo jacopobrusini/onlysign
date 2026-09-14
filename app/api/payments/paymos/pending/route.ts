@@ -7,6 +7,40 @@ import { getSession } from "@/lib/session";
 const PENDING_EXPIRATION_MS =
   45 * 60 * 1000;
 
+const PROCESSING_EXPIRATION_MS =
+  2 * 60 * 60 * 1000;
+
+async function deletePurchase(
+  purchaseId: number
+) {
+  const fundingTransactions =
+    await db.orm.public.PpqcheckTransaction
+      .where({
+        tokenPurchaseId:
+          purchaseId,
+      })
+      .all();
+
+  for (
+    const transaction of
+    fundingTransactions
+  ) {
+    await db.orm.public.PpqcheckTransaction
+      .where({
+        id:
+          transaction.id,
+      })
+      .delete();
+  }
+
+  await db.orm.public.TokenPurchase
+    .where({
+      id:
+        purchaseId,
+    })
+    .delete();
+}
+
 export async function GET() {
   try {
     const session =
@@ -15,7 +49,8 @@ export async function GET() {
     if (!session) {
       return NextResponse.json(
         {
-          error: "Non autenticato",
+          error:
+            "Non autenticato",
         },
         {
           status: 401,
@@ -26,88 +61,65 @@ export async function GET() {
     const purchases =
       await db.orm.public.TokenPurchase
         .where({
-          userId: session.user.id,
+          userId:
+            session.user.id,
         })
         .all();
 
     const now =
       Temporal.Now.instant();
 
-    for (const purchase of purchases) {
-      if (
-        purchase.paymentStatus !==
-        "PENDING"
-      ) {
-        continue;
-      }
-
+    for (
+      const purchase of purchases
+    ) {
       const age =
         now.epochMilliseconds -
-        purchase.createdAt.epochMilliseconds;
+        purchase.createdAt
+          .epochMilliseconds;
+
+      const expiration =
+        purchase.status ===
+        "PENDING"
+          ? PENDING_EXPIRATION_MS
+          : PROCESSING_EXPIRATION_MS;
 
       if (
         age <
-        PENDING_EXPIRATION_MS
+        expiration
       ) {
         continue;
       }
-
-      const transactions =
-        await db.orm.public.PpqcheckTransaction
-          .where({
-            tokenPurchaseId:
-              purchase.id,
-          })
-          .all();
-
-      const hasFundingTransaction =
-        transactions.length > 0;
-
-      if (
-        hasFundingTransaction
-      ) {
-        continue;
-      }
-
-      await db.orm.public.TokenPurchase
-        .where({
-          id: purchase.id,
-        })
-        .delete();
 
       console.log(
-        "Expired pending Paymos purchase deleted:",
+        "Expired token purchase deleted:",
         {
-          purchaseId: purchase.id,
-          createdAt:
-            purchase.createdAt.toString(),
+          purchaseId:
+            purchase.id,
+
+          status:
+            purchase.status,
         }
+      );
+
+      await deletePurchase(
+        purchase.id
       );
     }
 
     const refreshedPurchases =
       await db.orm.public.TokenPurchase
         .where({
-          userId: session.user.id,
+          userId:
+            session.user.id,
         })
         .all();
 
-    const pendingPurchases =
-      refreshedPurchases
-        .filter(
-          (purchase) =>
-            purchase.paymentStatus !==
-            "PAID_FUNDED"
-        )
-        .sort(
-          (a, b) =>
-            Number(b.id) -
-            Number(a.id)
-        );
-
     const result = [];
 
-    for (const purchase of pendingPurchases) {
+    for (
+      const purchase of
+      refreshedPurchases
+    ) {
       const transactions =
         await db.orm.public.PpqcheckTransaction
           .where({
@@ -117,22 +129,23 @@ export async function GET() {
           .all();
 
       const transaction =
-        transactions[0] ?? null;
+        transactions[0] ??
+        null;
 
       result.push({
-        id: purchase.id,
+        id:
+          purchase.id,
 
         tokens:
           purchase.tokens,
 
         amount:
-          Number(purchase.amount),
+          Number(
+            purchase.amount
+          ),
 
         status:
           purchase.status,
-
-        paymentStatus:
-          purchase.paymentStatus,
 
         fundingStatus:
           transaction?.fundingStatus ??
@@ -144,9 +157,17 @@ export async function GET() {
       });
     }
 
+    result.sort(
+      (a, b) =>
+        b.id -
+        a.id
+    );
+
     return NextResponse.json({
       success: true,
-      purchases: result,
+
+      purchases:
+        result,
     });
   } catch (error) {
     console.error(
@@ -156,7 +177,8 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error: "Errore interno",
+        error:
+          "Errore interno",
       },
       {
         status: 500,

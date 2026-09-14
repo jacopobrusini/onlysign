@@ -24,7 +24,7 @@ model User {
 
   devices                  Device[]
 
-  deviceRegistrationTokens DeviceRegistration[]
+  deviceRegistrationTokens DeviceRegistrationToken[]
 
   sessions                 Session[]
 
@@ -112,7 +112,7 @@ model Device {
 
 }
 
-model DeviceRegistration {
+model DeviceRegistrationToken {
 
   id        Int      @id @default(autoincrement())
 
@@ -140,34 +140,32 @@ model DeviceModelCache {
 
 
 // ─────────────────────────────────────────────
-
 // TOKEN PACKAGES
-
 // ─────────────────────────────────────────────
 
 model TokenPackage {
 
-  id                  Int     @id @default(autoincrement())
+  id              Int     @id @default(autoincrement())
 
-  name                String
+  name            String
 
-  tokens              Int
+  tokens          Int
 
-  price               Decimal
+  price           Decimal
 
-  ppqcheckBudget      Decimal
+  ppqcheckBudget  Decimal
 
-  active              Boolean @default(true)
-
-  purchases TokenPurchase[]
+  active          Boolean @default(true)
 
 }
 
 
 // ─────────────────────────────────────────────
-
-// TOKEN PURCHASES
-
+// ACTIVE TOKEN PURCHASES
+//
+// Questo modello NON è uno storico.
+// Esiste solamente mentre un acquisto è
+// in corso di elaborazione.
 // ─────────────────────────────────────────────
 
 model TokenPurchase {
@@ -176,55 +174,26 @@ model TokenPurchase {
 
   userId        Int
 
-  packageId     Int
-
   tokens        Int
 
   createdAt     DateTime @default(now())
 
-  // Prezzo del pacchetto in EUR
-
   amount        Decimal
 
-  // Valuta scelta dall'utente su NOWPayments
-
-  payCurrency   String?
-
-  // Quantità della crypto richiesta da NOWPayments
-
-  payAmount     Decimal?
-
-  // Fee a carico dell'utente
-
-  feeAmount     Decimal?
-
-  // Valuta della fee
-
-  feeCurrency   String?
-
-  // ID univoco del pagamento restituito dal provider
-
-  paymentId     String   @unique
-
-  paymosOrderId String? @unique
-
-  // Stato interno onlySign
+  paymosOrderId String   @unique
 
   status        TokenPurchaseStatus
 
-  // Ultimo stato ricevuto da NOWPayments
-
-  paymentStatus String?
-
-  user    User        @relation(fields: [userId], references: [id])
-
-  package TokenPackage @relation(fields: [packageId], references: [id])
-
-  transaction         TokenTransaction?
+  user User @relation(fields: [userId], references: [id])
 
   ppqcheckTransaction PpqcheckTransaction?
 
 }
+
+
+// ─────────────────────────────────────────────
+// PAYMOS WEBHOOK DEDUPLICATION
+// ─────────────────────────────────────────────
 
 model PaymosWebhookEvent {
 
@@ -238,38 +207,37 @@ model PaymosWebhookEvent {
 
 
 // ─────────────────────────────────────────────
-
 // TOKEN TRANSACTIONS
-
+//
+// Nessuna transazione viene creata per
+// l'acquisto dei token.
+//
+// Rimangono solamente le movimentazioni
+// reali dei token legate ai certificati
+// e agli eventuali rimborsi.
 // ─────────────────────────────────────────────
 
 model TokenTransaction {
 
-  id         Int                 @id @default(autoincrement())
+  id      Int                  @id @default(autoincrement())
 
-  userId     Int
+  userId  Int
 
-  amount     Int
+  amount  Int
 
-  type       TokenTransactionType
+  type    TokenTransactionType
 
-  purchaseId Int?                @unique
+  orderId Int?                @unique
 
-  orderId    Int?                @unique
+  user  User              @relation(fields: [userId], references: [id])
 
-  user     User              @relation(fields: [userId], references: [id])
-
-  purchase TokenPurchase?    @relation(fields: [purchaseId], references: [id])
-
-  order    CertificateOrder? @relation(fields: [orderId], references: [id])
+  order CertificateOrder? @relation(fields: [orderId], references: [id])
 
 }
 
 
 // ─────────────────────────────────────────────
-
 // CERTIFICATE TYPES
-
 // ─────────────────────────────────────────────
 
 model CertificateType {
@@ -296,9 +264,7 @@ model CertificateType {
 
 
 // ─────────────────────────────────────────────
-
 // CERTIFICATE ORDERS
-
 // ─────────────────────────────────────────────
 
 model CertificateOrder {
@@ -307,7 +273,7 @@ model CertificateOrder {
 
   userId             Int
 
-  deviceId            Int
+  deviceId           Int
 
   certificateTypeId  Int
 
@@ -331,9 +297,7 @@ model CertificateOrder {
 
 
 // ─────────────────────────────────────────────
-
-// ENUMS
-
+// TOKEN PURCHASE STATUS
 // ─────────────────────────────────────────────
 
 enum TokenPurchaseStatus {
@@ -342,21 +306,27 @@ enum TokenPurchaseStatus {
 
   PAID
 
-  FAILED
-
-  CANCELLED
+  PAID_FUNDING
 
 }
 
-enum TokenTransactionType {
 
-  PURCHASE
+// ─────────────────────────────────────────────
+// TOKEN TRANSACTION TYPE
+// ─────────────────────────────────────────────
+
+enum TokenTransactionType {
 
   CERTIFICATE
 
   REFUND
 
 }
+
+
+// ─────────────────────────────────────────────
+// CERTIFICATE ORDER STATUS
+// ─────────────────────────────────────────────
 
 enum CertificateOrderStatus {
 
@@ -374,6 +344,11 @@ enum CertificateOrderStatus {
 
 }
 
+
+// ─────────────────────────────────────────────
+// SYNC CREDIT
+// ─────────────────────────────────────────────
+
 model SyncCredit {
 
   id           Int     @id @default(autoincrement())
@@ -384,35 +359,40 @@ model SyncCredit {
 
 }
 
+
+// ─────────────────────────────────────────────
+// PPQCHECK TRANSACTIONS
+// ─────────────────────────────────────────────
+
 model PpqcheckTransaction {
 
-  id                  Int      @id @default(autoincrement())
+  id                    Int      @id @default(autoincrement())
 
-  type                PpqcheckTransactionType
+  type                  PpqcheckTransactionType
 
-  amount              Decimal
+  amount                Decimal
 
-  tokenPurchaseId     Int?     @unique
+  tokenPurchaseId       Int?     @unique
 
-  certificateOrderId  Int?     @unique
+  certificateOrderId    Int?     @unique
 
-  description         String?
+  description           String?
 
-  fundingStatus       PpqcheckFundingStatus?
+  fundingStatus         PpqcheckFundingStatus?
 
-  externalOrderId     String?
+  externalOrderId       String?
 
-  ppqDepositId        String?
+  ppqDepositId          String?
 
-  ppqDepositAddress   String?
+  ppqDepositAddress     String?
 
-  ppqDepositAmount    Decimal?
+  ppqDepositAmount      Decimal?
 
-  ppqDepositNetwork   String?
+  ppqDepositNetwork     String?
 
-  ppqDepositExpiresAt DateTime?
+  ppqDepositExpiresAt   DateTime?
 
-  paymosWithdrawalId  String?
+  paymosWithdrawalId   String?
 
   paymosWithdrawalStatus String?
 
@@ -421,6 +401,11 @@ model PpqcheckTransaction {
   certificateOrder    CertificateOrder? @relation(fields: [certificateOrderId], references: [id])
 
 }
+
+
+// ─────────────────────────────────────────────
+// PPQCHECK FUNDING STATUS
+// ─────────────────────────────────────────────
 
 enum PpqcheckFundingStatus {
 
@@ -431,6 +416,11 @@ enum PpqcheckFundingStatus {
   FAILED
 
 }
+
+
+// ─────────────────────────────────────────────
+// PPQCHECK TRANSACTION TYPE
+// ─────────────────────────────────────────────
 
 enum PpqcheckTransactionType {
 

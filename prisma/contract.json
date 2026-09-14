@@ -24,8 +24,8 @@
       "model": "DeviceModelCache",
       "namespace": "public"
     },
-    "deviceRegistration": {
-      "model": "DeviceRegistration",
+    "deviceRegistrationToken": {
+      "model": "DeviceRegistrationToken",
       "namespace": "public"
     },
     "emailVerificationToken": {
@@ -152,22 +152,14 @@
                 "value": "PAID"
               },
               {
-                "name": "FAILED",
-                "value": "FAILED"
-              },
-              {
-                "name": "CANCELLED",
-                "value": "CANCELLED"
+                "name": "PAID_FUNDING",
+                "value": "PAID_FUNDING"
               }
             ]
           },
           "TokenTransactionType": {
             "codecId": "pg/text@1",
             "members": [
-              {
-                "name": "PURCHASE",
-                "value": "PURCHASE"
-              },
               {
                 "name": "CERTIFICATE",
                 "value": "CERTIFICATE"
@@ -660,7 +652,7 @@
               "table": "deviceModelCache"
             }
           },
-          "DeviceRegistration": {
+          "DeviceRegistrationToken": {
             "fields": {
               "expiresAt": {
                 "nullable": false,
@@ -724,7 +716,7 @@
                 }
               },
               "namespaceId": "public",
-              "table": "deviceRegistration"
+              "table": "deviceRegistrationToken"
             }
           },
           "EmailVerificationToken": {
@@ -1269,23 +1261,7 @@
                 }
               }
             },
-            "relations": {
-              "purchases": {
-                "cardinality": "1:N",
-                "on": {
-                  "localFields": [
-                    "id"
-                  ],
-                  "targetFields": [
-                    "packageId"
-                  ]
-                },
-                "to": {
-                  "model": "TokenPurchase",
-                  "namespace": "public"
-                }
-              }
-            },
+            "relations": {},
             "storage": {
               "fields": {
                 "active": {
@@ -1327,20 +1303,6 @@
                   "kind": "scalar"
                 }
               },
-              "feeAmount": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/numeric@1",
-                  "kind": "scalar"
-                }
-              },
-              "feeCurrency": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -1348,43 +1310,8 @@
                   "kind": "scalar"
                 }
               },
-              "packageId": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/int4@1",
-                  "kind": "scalar"
-                }
-              },
-              "payAmount": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/numeric@1",
-                  "kind": "scalar"
-                }
-              },
-              "payCurrency": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "paymentId": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "paymentStatus": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
               "paymosOrderId": {
-                "nullable": true,
+                "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
@@ -1419,21 +1346,6 @@
               }
             },
             "relations": {
-              "package": {
-                "cardinality": "N:1",
-                "on": {
-                  "localFields": [
-                    "packageId"
-                  ],
-                  "targetFields": [
-                    "id"
-                  ]
-                },
-                "to": {
-                  "model": "TokenPackage",
-                  "namespace": "public"
-                }
-              },
               "ppqcheckTransaction": {
                 "cardinality": "1:1",
                 "on": {
@@ -1446,21 +1358,6 @@
                 },
                 "to": {
                   "model": "PpqcheckTransaction",
-                  "namespace": "public"
-                }
-              },
-              "transaction": {
-                "cardinality": "1:1",
-                "on": {
-                  "localFields": [
-                    "id"
-                  ],
-                  "targetFields": [
-                    "purchaseId"
-                  ]
-                },
-                "to": {
-                  "model": "TokenTransaction",
                   "namespace": "public"
                 }
               },
@@ -1488,29 +1385,8 @@
                 "createdAt": {
                   "column": "createdAt"
                 },
-                "feeAmount": {
-                  "column": "feeAmount"
-                },
-                "feeCurrency": {
-                  "column": "feeCurrency"
-                },
                 "id": {
                   "column": "id"
-                },
-                "packageId": {
-                  "column": "packageId"
-                },
-                "payAmount": {
-                  "column": "payAmount"
-                },
-                "payCurrency": {
-                  "column": "payCurrency"
-                },
-                "paymentId": {
-                  "column": "paymentId"
-                },
-                "paymentStatus": {
-                  "column": "paymentStatus"
                 },
                 "paymosOrderId": {
                   "column": "paymosOrderId"
@@ -1546,13 +1422,6 @@
                 }
               },
               "orderId": {
-                "nullable": true,
-                "type": {
-                  "codecId": "pg/int4@1",
-                  "kind": "scalar"
-                }
-              },
-              "purchaseId": {
                 "nullable": true,
                 "type": {
                   "codecId": "pg/int4@1",
@@ -1596,21 +1465,6 @@
                   "namespace": "public"
                 }
               },
-              "purchase": {
-                "cardinality": "N:1",
-                "on": {
-                  "localFields": [
-                    "purchaseId"
-                  ],
-                  "targetFields": [
-                    "id"
-                  ]
-                },
-                "to": {
-                  "model": "TokenPurchase",
-                  "namespace": "public"
-                }
-              },
               "user": {
                 "cardinality": "N:1",
                 "on": {
@@ -1637,9 +1491,6 @@
                 },
                 "orderId": {
                   "column": "orderId"
-                },
-                "purchaseId": {
-                  "column": "purchaseId"
                 },
                 "type": {
                   "column": "type"
@@ -1746,7 +1597,7 @@
                   ]
                 },
                 "to": {
-                  "model": "DeviceRegistration",
+                  "model": "DeviceRegistrationToken",
                   "namespace": "public"
                 }
               },
@@ -2261,7 +2112,7 @@
               },
               "uniques": []
             },
-            "deviceRegistration": {
+            "deviceRegistrationToken": {
               "columns": {
                 "expiresAt": {
                   "codecId": "pg/timestamptz-temporal@1",
@@ -2295,7 +2146,7 @@
                       "userId"
                     ],
                     "namespaceId": "public",
-                    "tableName": "deviceRegistration"
+                    "tableName": "deviceRegistrationToken"
                   },
                   "target": {
                     "columns": [
@@ -2311,8 +2162,8 @@
                   "columns": [
                     "userId"
                   ],
-                  "name": "deviceRegistration_userId_idx_a489d58a",
-                  "prefix": "deviceRegistration_userId_idx",
+                  "name": "deviceRegistrationToken_userId_idx_a489d58a",
+                  "prefix": "deviceRegistrationToken_userId_idx",
                   "unique": false
                 }
               ],
@@ -2826,8 +2677,8 @@
             "tokenPurchase": {
               "checks": [
                 {
-                  "expression": "\"status\" IN ('PENDING', 'PAID', 'FAILED', 'CANCELLED')",
-                  "name": "tokenPurchase_status_check_2a508822",
+                  "expression": "\"status\" IN ('PENDING', 'PAID', 'PAID_FUNDING')",
+                  "name": "tokenPurchase_status_check_0ce93a22",
                   "prefix": "tokenPurchase_status_check"
                 }
               ],
@@ -2846,16 +2697,6 @@
                   "nativeType": "timestamptz",
                   "nullable": false
                 },
-                "feeAmount": {
-                  "codecId": "pg/numeric@1",
-                  "nativeType": "numeric",
-                  "nullable": true
-                },
-                "feeCurrency": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": true
-                },
                 "id": {
                   "codecId": "pg/int4@1",
                   "default": {
@@ -2865,35 +2706,10 @@
                   "nativeType": "int4",
                   "nullable": false
                 },
-                "packageId": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
-                  "nullable": false
-                },
-                "payAmount": {
-                  "codecId": "pg/numeric@1",
-                  "nativeType": "numeric",
-                  "nullable": true
-                },
-                "payCurrency": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": true
-                },
-                "paymentId": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "paymentStatus": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": true
-                },
                 "paymosOrderId": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
-                  "nullable": true
+                  "nullable": false
                 },
                 "status": {
                   "codecId": "pg/text@1",
@@ -2933,33 +2749,9 @@
                     "namespaceId": "public",
                     "tableName": "user"
                   }
-                },
-                {
-                  "source": {
-                    "columns": [
-                      "packageId"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "tokenPurchase"
-                  },
-                  "target": {
-                    "columns": [
-                      "id"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "tokenPackage"
-                  }
                 }
               ],
               "indexes": [
-                {
-                  "columns": [
-                    "packageId"
-                  ],
-                  "name": "tokenPurchase_packageId_idx_51f866f4",
-                  "prefix": "tokenPurchase_packageId_idx",
-                  "unique": false
-                },
                 {
                   "columns": [
                     "userId"
@@ -2977,11 +2769,6 @@
               "uniques": [
                 {
                   "columns": [
-                    "paymentId"
-                  ]
-                },
-                {
-                  "columns": [
                     "paymosOrderId"
                   ]
                 }
@@ -2990,8 +2777,8 @@
             "tokenTransaction": {
               "checks": [
                 {
-                  "expression": "\"type\" IN ('PURCHASE', 'CERTIFICATE', 'REFUND')",
-                  "name": "tokenTransaction_type_check_f327a2b8",
+                  "expression": "\"type\" IN ('CERTIFICATE', 'REFUND')",
+                  "name": "tokenTransaction_type_check_23a5eb61",
                   "prefix": "tokenTransaction_type_check"
                 }
               ],
@@ -3011,11 +2798,6 @@
                   "nullable": false
                 },
                 "orderId": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
-                  "nullable": true
-                },
-                "purchaseId": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
                   "nullable": true
@@ -3057,22 +2839,6 @@
                 {
                   "source": {
                     "columns": [
-                      "purchaseId"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "tokenTransaction"
-                  },
-                  "target": {
-                    "columns": [
-                      "id"
-                    ],
-                    "namespaceId": "public",
-                    "tableName": "tokenPurchase"
-                  }
-                },
-                {
-                  "source": {
-                    "columns": [
                       "orderId"
                     ],
                     "namespaceId": "public",
@@ -3103,11 +2869,6 @@
                 ]
               },
               "uniques": [
-                {
-                  "columns": [
-                    "purchaseId"
-                  ]
-                },
                 {
                   "columns": [
                     "orderId"
@@ -3224,14 +2985,12 @@
               "values": [
                 "PENDING",
                 "PAID",
-                "FAILED",
-                "CANCELLED"
+                "PAID_FUNDING"
               ]
             },
             "TokenTransactionType": {
               "kind": "valueSet",
               "values": [
-                "PURCHASE",
                 "CERTIFICATE",
                 "REFUND"
               ]
@@ -3242,7 +3001,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "a2e4bb8ed93adae0e64713f8f3895f52e52d5ba062f8f6b11bacab0eacb28c47"
+    "storageHash": "0ff14c1c5cbf4821c1b908eaa319002aa65939655a7c5102e5ded9fb186ff1ef"
   },
   "capabilities": {
     "postgres": {
