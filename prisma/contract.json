@@ -24,8 +24,8 @@
       "model": "DeviceModelCache",
       "namespace": "public"
     },
-    "deviceRegistrationToken": {
-      "model": "DeviceRegistrationToken",
+    "deviceRegistration": {
+      "model": "DeviceRegistration",
       "namespace": "public"
     },
     "emailVerificationToken": {
@@ -652,7 +652,7 @@
               "table": "deviceModelCache"
             }
           },
-          "DeviceRegistrationToken": {
+          "DeviceRegistration": {
             "fields": {
               "expiresAt": {
                 "nullable": false,
@@ -716,7 +716,7 @@
                 }
               },
               "namespaceId": "public",
-              "table": "deviceRegistrationToken"
+              "table": "deviceRegistration"
             }
           },
           "EmailVerificationToken": {
@@ -1586,7 +1586,7 @@
                   "namespace": "public"
                 }
               },
-              "deviceRegistrationTokens": {
+              "deviceRegistrations": {
                 "cardinality": "1:N",
                 "on": {
                   "localFields": [
@@ -1597,7 +1597,7 @@
                   ]
                 },
                 "to": {
-                  "model": "DeviceRegistrationToken",
+                  "model": "DeviceRegistration",
                   "namespace": "public"
                 }
               },
@@ -2112,7 +2112,7 @@
               },
               "uniques": []
             },
-            "deviceRegistrationToken": {
+            "deviceRegistration": {
               "columns": {
                 "expiresAt": {
                   "codecId": "pg/timestamptz-temporal@1",
@@ -2146,7 +2146,7 @@
                       "userId"
                     ],
                     "namespaceId": "public",
-                    "tableName": "deviceRegistrationToken"
+                    "tableName": "deviceRegistration"
                   },
                   "target": {
                     "columns": [
@@ -2162,8 +2162,8 @@
                   "columns": [
                     "userId"
                   ],
-                  "name": "deviceRegistrationToken_userId_idx_a489d58a",
-                  "prefix": "deviceRegistrationToken_userId_idx",
+                  "name": "deviceRegistration_userId_idx_a489d58a",
+                  "prefix": "deviceRegistration_userId_idx",
                   "unique": false
                 }
               ],
@@ -3001,7 +3001,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "0ff14c1c5cbf4821c1b908eaa319002aa65939655a7c5102e5ded9fb186ff1ef"
+    "storageHash": "1fa83c487de54647a080c92d5076c94667519e981fa16c6efdec0263ae24155a"
   },
   "capabilities": {
     "postgres": {

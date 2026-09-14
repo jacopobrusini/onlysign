@@ -24,7 +24,7 @@ model User {
 
   devices                  Device[]
 
-  deviceRegistrationTokens DeviceRegistrationToken[]
+  deviceRegistrations      DeviceRegistration[]
 
   sessions                 Session[]
 
@@ -35,6 +35,7 @@ model User {
   certificateOrders        CertificateOrder[]
 
 }
+
 
 model EmailVerificationToken {
 
@@ -50,6 +51,7 @@ model EmailVerificationToken {
 
 }
 
+
 model Session {
 
   id               Int      @id @default(autoincrement())
@@ -63,6 +65,7 @@ model Session {
   user User @relation(fields: [userId], references: [id])
 
 }
+
 
 model PasswordChangeToken {
 
@@ -80,6 +83,7 @@ model PasswordChangeToken {
 
 }
 
+
 model AccountDeletionToken {
 
   id        Int      @id @default(autoincrement())
@@ -93,6 +97,7 @@ model AccountDeletionToken {
   user User @relation(fields: [userId], references: [id])
 
 }
+
 
 model Device {
 
@@ -112,7 +117,8 @@ model Device {
 
 }
 
-model DeviceRegistrationToken {
+
+model DeviceRegistration {
 
   id        Int      @id @default(autoincrement())
 
@@ -125,6 +131,7 @@ model DeviceRegistrationToken {
   user User @relation(fields: [userId], references: [id])
 
 }
+
 
 model DeviceModelCache {
 

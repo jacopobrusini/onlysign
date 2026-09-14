@@ -58,6 +58,14 @@ function sleep(
   );
 }
 
+/*
+ * Legge il saldo reale del wallet PPQCheck.
+ *
+ * Questo valore NON viene preso da SyncCredit:
+ * SyncCredit è la contabilità interna di OnlySign,
+ * mentre questo endpoint restituisce il saldo reale
+ * disponibile sul wallet PPQCheck.
+ */
 async function getPpqcheckBalance() {
   const apiKey =
     requireEnv(
@@ -85,8 +93,7 @@ async function getPpqcheckBalance() {
   let data: unknown;
 
   try {
-    data =
-      JSON.parse(text);
+    data = JSON.parse(text);
   } catch {
     throw new Error(
       `PPQCHECK_USDT_BALANCE_INVALID_RESPONSE:${text}`
@@ -112,18 +119,16 @@ async function getPpqcheckBalance() {
     data as Record<string, unknown>;
 
   const nestedData =
-    (
-      typeof root.data === "object" &&
-      root.data !== null
-    )
+    typeof root.data === "object" &&
+    root.data !== null
       ? root.data as Record<string, unknown>
       : root;
 
   const balance =
     Number(
       nestedData.availableBalance ??
-        nestedData.balance ??
-        0
+      nestedData.balance ??
+      0
     );
 
   if (!Number.isFinite(balance)) {
@@ -135,6 +140,10 @@ async function getPpqcheckBalance() {
   return balance;
 }
 
+/*
+ * Recupera o inizializza la contabilità interna
+ * della copertura PPQCheck.
+ */
 export async function getSyncCredit() {
   let syncCredit =
     await db.orm.public.SyncCredit
@@ -144,62 +153,36 @@ export async function getSyncCredit() {
       .first();
 
   if (!syncCredit) {
-    console.log(
-      "SyncCredit not initialized. Creating id=1."
-    );
-
     syncCredit =
       await db.orm.public.SyncCredit.create({
         id: 1,
-
-        ppqAmount:
-          "0",
-
-        ppqCoverage:
-          "0",
+        ppqAmount: "0",
+        ppqCoverage: "0",
       });
-
-    console.log(
-      "SyncCredit initialized:",
-      {
-        id:
-          syncCredit.id,
-
-        ppqAmount:
-          String(
-            syncCredit.ppqAmount
-          ),
-
-        ppqCoverage:
-          String(
-            syncCredit.ppqCoverage
-          ),
-      }
-    );
   }
 
   return syncCredit;
 }
 
+/*
+ * Calcola quanto funding PPQCheck è già riservato
+ * da altri acquisti ancora in elaborazione.
+ */
 async function getPendingReservedFunding(
   excludePurchaseId?: number
 ) {
   const pendingTransactions =
     await db.orm.public.PpqcheckTransaction
       .where({
-        type:
-          "ADJUSTMENT",
-
-        fundingStatus:
-          "PENDING",
+        type: "ADJUSTMENT",
+        fundingStatus: "PENDING",
       })
       .all();
 
   let reservedAmount = 0;
 
   for (
-    const transaction
-    of pendingTransactions
+    const transaction of pendingTransactions
   ) {
     if (
       excludePurchaseId !== undefined &&
@@ -210,9 +193,7 @@ async function getPendingReservedFunding(
     }
 
     const amount =
-      Number(
-        transaction.amount
-      );
+      Number(transaction.amount);
 
     if (
       !Number.isFinite(amount) ||
@@ -221,8 +202,7 @@ async function getPendingReservedFunding(
       continue;
     }
 
-    reservedAmount +=
-      amount;
+    reservedAmount += amount;
   }
 
   return Number(
@@ -230,6 +210,10 @@ async function getPendingReservedFunding(
   );
 }
 
+/*
+ * Chiede a PPQCheck di creare un deposito USDT
+ * per l'importo necessario.
+ */
 async function createPpqcheckDeposit(
   amount: number
 ) {
@@ -263,22 +247,6 @@ async function createPpqcheckDeposit(
     );
   }
 
-  const body =
-    JSON.stringify({
-      amount,
-
-      network,
-    });
-
-  console.log(
-    "Creating PPQCheck USDT deposit:",
-    {
-      amount,
-
-      network,
-    }
-  );
-
   const response =
     await fetch(
       `${PPQCHECK_API_BASE}/v1/integration/wallet/deposit-usdt`,
@@ -286,14 +254,16 @@ async function createPpqcheckDeposit(
         method: "POST",
 
         headers: {
-          "X-API-Key":
-            apiKey,
+          "X-API-Key": apiKey,
 
           "Content-Type":
             "application/json",
         },
 
-        body,
+        body: JSON.stringify({
+          amount,
+          network,
+        }),
 
         cache: "no-store",
       }
@@ -305,8 +275,7 @@ async function createPpqcheckDeposit(
   let data: unknown;
 
   try {
-    data =
-      JSON.parse(text);
+    data = JSON.parse(text);
   } catch {
     throw new Error(
       `PPQCHECK_DEPOSIT_INVALID_RESPONSE:${text}`
@@ -341,10 +310,8 @@ async function createPpqcheckDeposit(
   }
 
   const depositData =
-    (
-      typeof root.data === "object" &&
-      root.data !== null
-    )
+    typeof root.data === "object" &&
+    root.data !== null
       ? root.data as Record<string, unknown>
       : root;
 
@@ -396,8 +363,7 @@ async function createPpqcheckDeposit(
   }
 
   if (
-    amountUsdt <
-    amount
+    amountUsdt < amount
   ) {
     throw new Error(
       `PPQCHECK_DEPOSIT_AMOUNT_TOO_LOW:${amountUsdt}:${amount}`
@@ -405,8 +371,7 @@ async function createPpqcheckDeposit(
   }
 
   const resolvedNetwork =
-    depositNetwork ??
-    network;
+    depositNetwork ?? network;
 
   if (
     resolvedNetwork.toLowerCase() !==
@@ -416,26 +381,6 @@ async function createPpqcheckDeposit(
       `PPQCHECK_DEPOSIT_UNSUPPORTED_NETWORK:${resolvedNetwork}`
     );
   }
-
-  console.log(
-    "PPQCheck USDT deposit created:",
-    {
-      id,
-
-      address,
-
-      requestedAmount:
-        amount,
-
-      returnedAmount:
-        amountUsdt,
-
-      network:
-        resolvedNetwork,
-
-      expiresAt,
-    }
-  );
 
   return {
     id,
@@ -451,6 +396,10 @@ async function createPpqcheckDeposit(
   };
 }
 
+/*
+ * Chiede al gateway Paymos di effettuare
+ * il trasferimento USDT verso il deposito PPQCheck.
+ */
 async function createPaymosWithdrawal(
   amount: number,
   destinationAddress: string,
@@ -498,24 +447,6 @@ async function createPaymosWithdrawal(
     );
   }
 
-  const body =
-    JSON.stringify({
-      amount:
-        amount.toFixed(2),
-
-      currency:
-        "USDT",
-
-      network:
-        "BEP20",
-
-      destination_address:
-        destinationAddress,
-
-      external_order_id:
-        externalOrderId,
-    });
-
   const response =
     await fetch(
       `${gatewayUrl}/paymos/withdrawals`,
@@ -530,7 +461,20 @@ async function createPaymosWithdrawal(
             "application/json",
         },
 
-        body,
+        body: JSON.stringify({
+          amount:
+            amount.toFixed(2),
+
+          currency: "USDT",
+
+          network: "BEP20",
+
+          destination_address:
+            destinationAddress,
+
+          external_order_id:
+            externalOrderId,
+        }),
 
         cache: "no-store",
       }
@@ -569,6 +513,11 @@ async function createPaymosWithdrawal(
   return json;
 }
 
+/*
+ * Recupera il record tecnico temporaneo
+ * che rappresenta il funding PPQCheck
+ * di un determinato acquisto.
+ */
 async function getFundingTransaction(
   purchaseId: number
 ) {
@@ -586,23 +535,22 @@ async function getFundingTransaction(
   return transactions[0] ?? null;
 }
 
+/*
+ * Determina se il saldo PPQCheck disponibile
+ * è sufficiente per coprire il nuovo token.
+ *
+ * Se non è sufficiente:
+ *
+ * 1. crea un deposito PPQCheck
+ * 2. crea il withdrawal Paymos
+ * 3. salva il funding temporaneo
+ * 4. attende il webhook Paymos
+ */
 async function ensurePpqcheckFunding(
   operationAmount: number,
   externalOrderId: string,
-  purchaseId: number,
-  allowFailedFundingRetry = false
+  purchaseId: number
 ) {
-  if (
-    !Number.isFinite(
-      operationAmount
-    ) ||
-    operationAmount <= 0
-  ) {
-    throw new Error(
-      "INVALID_OPERATION_AMOUNT"
-    );
-  }
-
   const syncCredit =
     await getSyncCredit();
 
@@ -647,45 +595,13 @@ async function ensurePpqcheckFunding(
         availableBalance
     );
 
-  console.log(
-    "PPQCheck funding calculation:",
-    {
-      purchaseId,
-
-      operationAmount,
-
-      currentCoverage,
-
-      targetCoverage,
-
-      actualBalance,
-
-      reservedFunding,
-
-      availableBalance,
-
-      fundingNeeded,
-    }
-  );
-
+  /*
+   * Il saldo disponibile copre già
+   * l'operazione.
+   */
   if (
     fundingNeeded <= 0
   ) {
-    console.log(
-      "PPQCheck funding not required:",
-      {
-        purchaseId,
-
-        operationAmount,
-
-        actualBalance,
-
-        reservedFunding,
-
-        availableBalance,
-      }
-    );
-
     return {
       status:
         "COMPLETED" as const,
@@ -719,44 +635,51 @@ async function ensurePpqcheckFunding(
       );
     }
 
+    /*
+     * Funding già inviato e ancora
+     * in attesa del completamento.
+     */
     if (
       existing.fundingStatus ===
       "PENDING"
     ) {
       if (
-        existing.paymosWithdrawalId
+        !existing.paymosWithdrawalId
       ) {
-        return {
-          status:
-            "PENDING" as const,
-
-          fundingAmount:
-            Number(
-              existing.amount
-            ),
-
-          targetCoverage,
-
-          actualBalance,
-
-          reservedFunding,
-
-          availableBalance,
-
-          withdrawalId:
-            existing.paymosWithdrawalId,
-
-          withdrawalStatus:
-            existing.paymosWithdrawalStatus ??
-            undefined,
-        };
+        throw new Error(
+          "PPQCHECK_FUNDING_PENDING_WITHOUT_WITHDRAWAL_ID"
+        );
       }
 
-      throw new Error(
-        "PPQCHECK_FUNDING_PENDING_WITHOUT_WITHDRAWAL_ID"
-      );
+      return {
+        status:
+          "PENDING" as const,
+
+        fundingAmount:
+          Number(
+            existing.amount
+          ),
+
+        targetCoverage,
+
+        actualBalance,
+
+        reservedFunding,
+
+        availableBalance,
+
+        withdrawalId:
+          existing.paymosWithdrawalId,
+
+        withdrawalStatus:
+          existing.paymosWithdrawalStatus ??
+          undefined,
+      };
     }
 
+    /*
+     * Il funding risulta già completato.
+     */
     if (
       existing.fundingStatus ===
       "COMPLETED"
@@ -788,164 +711,69 @@ async function ensurePpqcheckFunding(
       };
     }
 
+    /*
+     * Un funding FAILED non dovrebbe
+     * normalmente arrivare qui perché il
+     * webhook lo elimina insieme al purchase.
+     *
+     * Lo eliminiamo comunque per sicurezza.
+     */
     if (
       existing.fundingStatus ===
       "FAILED"
     ) {
-      if (
-        !allowFailedFundingRetry
-      ) {
-        throw new Error(
-          "PPQCHECK_FUNDING_PREVIOUSLY_FAILED"
-        );
-      }
-
-      console.log(
-        "Authorized PPQCheck funding retry:",
-        {
-          purchaseId,
-
-          externalOrderId,
-        }
-      );
-    }
-  }
-
-  let deposit;
-
-  try {
-    deposit =
-      await createPpqcheckDeposit(
-        fundingNeeded
-      );
-  } catch (error) {
-    console.error(
-      "PPQCheck deposit creation failed:",
-      {
-        purchaseId,
-
-        fundingNeeded,
-
-        externalOrderId,
-
-        error,
-      }
-    );
-
-    throw error;
-  }
-
-  const depositAmount =
-    deposit.amountUsdt;
-
-  const depositNetwork =
-    deposit.network;
-
-  if (
-    depositNetwork.toLowerCase() !==
-    "binance"
-  ) {
-    throw new Error(
-      "PPQCHECK_DEPOSIT_NETWORK_MISMATCH"
-    );
-  }
-
-  let transaction;
-
-  const transactionData = {
-    tokenPurchaseId:
-      purchaseId,
-
-    type:
-      "ADJUSTMENT" as const,
-
-    amount:
-      fundingNeeded.toFixed(2),
-
-    description:
-      "PPQCheck USDT funding",
-
-    fundingStatus:
-      "PENDING" as const,
-
-    externalOrderId,
-
-    ppqDepositId:
-      deposit.id,
-
-    ppqDepositAddress:
-      deposit.address,
-
-    ppqDepositAmount:
-      depositAmount.toFixed(2),
-
-    ppqDepositNetwork:
-      depositNetwork,
-
-    ppqDepositExpiresAt:
-      deposit.expiresAt
-        ? Temporal.Instant.from(
-            deposit.expiresAt
-          )
-        : null,
-  };
-
-  if (!existing) {
-    transaction =
-      await db.orm.public.PpqcheckTransaction.create(
-        transactionData
-      );
-  } else {
-    await db.orm.public.PpqcheckTransaction
-      .where({
-        id:
-          existing.id,
-      })
-      .update(
-        transactionData
-      );
-
-    transaction =
       await db.orm.public.PpqcheckTransaction
         .where({
           id:
             existing.id,
         })
-        .first();
+        .delete();
+    }
   }
 
-  if (!transaction) {
-    throw new Error(
-      "PPQCHECK_TRANSACTION_NOT_FOUND_AFTER_CREATION"
+  const deposit =
+    await createPpqcheckDeposit(
+      fundingNeeded
     );
-  }
 
-  console.log(
-    "Paymos PPQCheck funding:",
-    {
-      purchaseId,
+  const transaction =
+    await db.orm.public.PpqcheckTransaction.create({
+      tokenPurchaseId:
+        purchaseId,
 
-      fundingAmount:
-        fundingNeeded,
+      type:
+        "ADJUSTMENT",
 
-      ppqDepositReturnedAmount:
-        depositAmount,
+      amount:
+        fundingNeeded.toFixed(2),
+
+      description:
+        "PPQCheck USDT funding",
+
+      fundingStatus:
+        "PENDING",
 
       externalOrderId,
 
-      depositId:
+      ppqDepositId:
         deposit.id,
 
-      depositAddress:
+      ppqDepositAddress:
         deposit.address,
 
-      depositNetwork:
-        depositNetwork,
+      ppqDepositAmount:
+        deposit.amountUsdt.toFixed(2),
 
-      depositExpiresAt:
-        deposit.expiresAt,
-    }
-  );
+      ppqDepositNetwork:
+        deposit.network,
+
+      ppqDepositExpiresAt:
+        deposit.expiresAt
+          ? Temporal.Instant.from(
+              deposit.expiresAt
+            )
+          : null,
+    });
 
   let withdrawal:
     PaymosWithdrawalResponse;
@@ -965,10 +793,7 @@ async function ensurePpqcheckFunding(
         id:
           transaction.id,
       })
-      .update({
-        fundingStatus:
-          "FAILED",
-      });
+      .delete();
 
     throw error;
   }
@@ -976,23 +801,13 @@ async function ensurePpqcheckFunding(
   const withdrawalId =
     withdrawal.withdrawal_id;
 
-  const withdrawalStatus =
-    withdrawal.status;
-
   if (!withdrawalId) {
     await db.orm.public.PpqcheckTransaction
       .where({
         id:
           transaction.id,
       })
-      .update({
-        fundingStatus:
-          "FAILED",
-
-        paymosWithdrawalStatus:
-          withdrawalStatus ??
-          null,
-      });
+      .delete();
 
     throw new Error(
       "PAYMOS_WITHDRAWAL_ID_MISSING"
@@ -1005,48 +820,13 @@ async function ensurePpqcheckFunding(
         transaction.id,
     })
     .update({
-      fundingStatus:
-        "PENDING",
-
       paymosWithdrawalId:
         withdrawalId,
 
       paymosWithdrawalStatus:
-        withdrawalStatus ??
+        withdrawal.status ??
         null,
     });
-
-  console.log(
-    "Paymos PPQCheck funding withdrawal created:",
-    {
-      purchaseId,
-
-      fundingAmount:
-        fundingNeeded,
-
-      paymosAmount:
-        fundingNeeded.toFixed(2),
-
-      ppqDepositReturnedAmount:
-        depositAmount,
-
-      withdrawalId,
-
-      withdrawalStatus,
-
-      depositId:
-        deposit.id,
-
-      depositAddress:
-        deposit.address,
-
-      depositNetwork:
-        depositNetwork,
-
-      depositExpiresAt:
-        deposit.expiresAt,
-    }
-  );
 
   return {
     status:
@@ -1065,10 +845,15 @@ async function ensurePpqcheckFunding(
 
     withdrawalId,
 
-    withdrawalStatus,
+    withdrawalStatus:
+      withdrawal.status,
   };
 }
 
+/*
+ * Aspetta che il saldo reale PPQCheck
+ * raggiunga la copertura richiesta.
+ */
 async function waitForPpqcheckCoverage(
   targetCoverage: number
 ) {
@@ -1076,8 +861,10 @@ async function waitForPpqcheckCoverage(
 
   for (
     let attempt = 0;
+
     attempt <
     PPQCHECK_BALANCE_POLL_ATTEMPTS;
+
     attempt++
   ) {
     const balance =
@@ -1086,34 +873,10 @@ async function waitForPpqcheckCoverage(
     lastBalance =
       balance;
 
-    console.log(
-      "PPQCheck balance poll:",
-      {
-        attempt:
-          attempt + 1,
-
-        targetCoverage,
-
-        balance,
-      }
-    );
-
     if (
       balance >=
       targetCoverage
     ) {
-      console.log(
-        "PPQCheck funding visible:",
-        {
-          targetCoverage,
-
-          balance,
-
-          attempt:
-            attempt + 1,
-        }
-      );
-
       return {
         visible:
           true,
@@ -1131,35 +894,15 @@ async function waitForPpqcheckCoverage(
         PPQCHECK_BALANCE_POLL_DELAYS_MS[
           Math.min(
             attempt + 1,
-            PPQCHECK_BALANCE_POLL_DELAYS_MS.length - 1
+
+            PPQCHECK_BALANCE_POLL_DELAYS_MS.length -
+              1
           )
         ];
 
-      console.log(
-        "Waiting before next PPQCheck balance poll:",
-        {
-          delayMs:
-            delay,
-        }
-      );
-
-      await sleep(
-        delay
-      );
+      await sleep(delay);
     }
   }
-
-  console.log(
-    "PPQCheck funding not visible after polling window:",
-    {
-      targetCoverage,
-
-      lastBalance,
-
-      attempts:
-        PPQCHECK_BALANCE_POLL_ATTEMPTS,
-    }
-  );
 
   return {
     visible:
@@ -1170,6 +913,18 @@ async function waitForPpqcheckCoverage(
   };
 }
 
+/*
+ * Finalizza l'acquisto.
+ *
+ * Operazioni atomiche:
+ *
+ * 1. aggiorna SyncCredit
+ * 2. incrementa User.tokenBalance
+ * 3. elimina PpqcheckTransaction
+ * 4. elimina TokenPurchase
+ *
+ * NON viene creata una TokenTransaction PURCHASE.
+ */
 export async function finalizeTokenPurchase(
   purchaseId: number
 ) {
@@ -1181,34 +936,36 @@ export async function finalizeTokenPurchase(
       })
       .first();
 
+  /*
+   * Se il purchase non esiste più,
+   * l'operazione è già stata completata
+   * oppure rimossa.
+   *
+   * Questo rende i retry idempotenti.
+   */
   if (!purchase) {
-    throw new Error(
-      "TOKEN_PURCHASE_NOT_FOUND"
-    );
+    return {
+      status:
+        "COMPLETED" as const,
+
+      purchaseId,
+    };
   }
 
   if (
-    purchase.paymentStatus !==
+    purchase.status !==
       "PAID" &&
-    purchase.paymentStatus !==
+    purchase.status !==
       "PAID_FUNDING"
   ) {
-    if (
-      purchase.paymentStatus ===
-      "PAID_FUNDED"
-    ) {
-      return {
-        purchaseId,
-
-        tokens:
-          purchase.tokens,
-      };
-    }
-
     throw new Error(
       "TOKEN_PURCHASE_NOT_PAID"
     );
   }
+
+  const operationAmount =
+    purchase.tokens *
+    PPQCHECK_BUDGET_PER_TOKEN;
 
   const syncCredit =
     await getSyncCredit();
@@ -1236,64 +993,35 @@ export async function finalizeTokenPurchase(
     );
   }
 
-  const operationAmount =
-    purchase.tokens *
-    PPQCHECK_BUDGET_PER_TOKEN;
-
   const targetCoverage =
     currentCoverage +
     operationAmount;
 
-  console.log(
-    "Finalizing token purchase:",
-    {
-      purchaseId,
-
-      tokens:
-        purchase.tokens,
-
-      operationAmount,
-
-      currentCoverage,
-
-      targetCoverage,
-    }
-  );
-
+  /*
+   * Controlliamo il saldo reale PPQCheck.
+   */
   const ppqBalance =
     await waitForPpqcheckCoverage(
       targetCoverage
     );
 
+  /*
+   * Se il funding non è ancora visibile
+   * sul saldo PPQCheck, manteniamo il purchase
+   * in PAID_FUNDING.
+   */
   if (
     !ppqBalance.visible
   ) {
-    console.log(
-      "PPQCheck funding still pending after polling window:",
-      {
-        purchaseId,
-
-        targetCoverage,
-
-        ppqBalance:
-          ppqBalance.balance,
-      }
-    );
-
-    if (
-      purchase.paymentStatus ===
-      "PAID"
-    ) {
-      await db.orm.public.TokenPurchase
-        .where({
-          id:
-            purchaseId,
-        })
-        .update({
-          paymentStatus:
-            "PAID_FUNDING",
-        });
-    }
+    await db.orm.public.TokenPurchase
+      .where({
+        id:
+          purchaseId,
+      })
+      .update({
+        status:
+          "PAID_FUNDING",
+      });
 
     return {
       status:
@@ -1311,6 +1039,13 @@ export async function finalizeTokenPurchase(
     };
   }
 
+  /*
+   * Tutto è coperto.
+   *
+   * Ora aggiorniamo la contabilità e
+   * accreditiamo i token nella stessa
+   * transazione database.
+   */
   await db.transaction(
     async (tx) => {
       const currentPurchase =
@@ -1321,23 +1056,18 @@ export async function finalizeTokenPurchase(
           })
           .first();
 
+      /*
+       * Un'altra richiesta ha già completato
+       * l'ordine.
+       */
       if (!currentPurchase) {
-        throw new Error(
-          "TOKEN_PURCHASE_NOT_FOUND"
-        );
-      }
-
-      if (
-        currentPurchase.paymentStatus ===
-        "PAID_FUNDED"
-      ) {
         return;
       }
 
       if (
-        currentPurchase.paymentStatus !==
+        currentPurchase.status !==
           "PAID" &&
-        currentPurchase.paymentStatus !==
+        currentPurchase.status !==
           "PAID_FUNDING"
       ) {
         throw new Error(
@@ -1389,16 +1119,24 @@ export async function finalizeTokenPurchase(
         txAmount +
         operationAmount;
 
+      /*
+       * Aggiorna la copertura interna
+       * PPQCheck.
+       */
       const syncCreditUpdate =
         tx.sql.public.syncCredit
           .update((f, fns) => ({
             ppqAmount:
               fns.raw`${newAmount.toFixed(2)}`
-                .returns("pg/numeric@1"),
+                .returns(
+                  "pg/numeric@1"
+                ),
 
             ppqCoverage:
               fns.raw`${newCoverage.toFixed(2)}`
-                .returns("pg/numeric@1"),
+                .returns(
+                  "pg/numeric@1"
+                ),
           }))
           .where((f, fns) =>
             fns.eq(
@@ -1412,12 +1150,17 @@ export async function finalizeTokenPurchase(
         syncCreditUpdate
       );
 
+      /*
+       * Accredita i token all'utente.
+       */
       const userTokenBalanceUpdate =
         tx.sql.public.user
           .update((f, fns) => ({
             tokenBalance:
               fns.raw`${f.tokenBalance} + ${currentPurchase.tokens}`
-                .returns("pg/int4@1"),
+                .returns(
+                  "pg/int4@1"
+                ),
           }))
           .where((f, fns) =>
             fns.eq(
@@ -1431,31 +1174,10 @@ export async function finalizeTokenPurchase(
         userTokenBalanceUpdate
       );
 
-      await tx.orm.public.TokenTransaction
-        .create({
-          userId:
-            currentPurchase.userId,
-
-          amount:
-            currentPurchase.tokens,
-
-          type:
-            "PURCHASE",
-
-          purchaseId:
-            currentPurchase.id,
-        });
-
-      await tx.orm.public.TokenPurchase
-        .where({
-          id:
-            currentPurchase.id,
-        })
-        .update({
-          paymentStatus:
-            "PAID_FUNDED",
-        });
-
+      /*
+       * Elimina il record tecnico temporaneo
+       * del funding PPQCheck.
+       */
       const fundingTransaction =
         await tx.orm.public.PpqcheckTransaction
           .where({
@@ -1473,45 +1195,26 @@ export async function finalizeTokenPurchase(
             id:
               fundingTransaction.id,
           })
-          .update({
-            fundingStatus:
-              "COMPLETED",
-          });
+          .delete();
       }
 
-      console.log(
-        "Token purchase finalized:",
-        {
-          purchaseId:
+      /*
+       * Il TokenPurchase non è uno storico.
+       * Una volta completato viene eliminato.
+       */
+      await tx.orm.public.TokenPurchase
+        .where({
+          id:
             currentPurchase.id,
-
-          userId:
-            currentPurchase.userId,
-
-          tokens:
-            currentPurchase.tokens,
-
-          newCoverage,
-
-          newAmount,
-        }
-      );
+        })
+        .delete();
     }
   );
 
-  const finalBalance =
-    await getPpqcheckBalance();
-
-  if (
-    finalBalance <
-    targetCoverage
-  ) {
-    throw new Error(
-      "PPQCHECK_BELOW_COVERAGE"
-    );
-  }
-
   return {
+    status:
+      "COMPLETED" as const,
+
     purchaseId,
 
     tokens:
@@ -1520,18 +1223,15 @@ export async function finalizeTokenPurchase(
     targetCoverage,
 
     ppqBalance:
-      Math.max(
-        ppqBalance.balance,
-        finalBalance
-      ),
+      ppqBalance.balance,
   };
 }
 
+/*
+ * Processo principale di un acquisto pagato.
+ */
 export async function processPaidTokenPurchase(
-  purchaseId: number,
-  options?: {
-    allowFailedFundingRetry?: boolean;
-  }
+  purchaseId: number
 ) {
   const purchase =
     await db.orm.public.TokenPurchase
@@ -1541,102 +1241,21 @@ export async function processPaidTokenPurchase(
       })
       .first();
 
+  /*
+   * Acquisto già completato/eliminato.
+   */
   if (!purchase) {
-    throw new Error(
-      "TOKEN_PURCHASE_NOT_FOUND"
-    );
-  }
-
-  const allowFailedFundingRetry =
-    options?.allowFailedFundingRetry ===
-    true;
-
-  console.log(
-    "Processing paid token purchase:",
-    {
-      purchaseId,
-
-      userId:
-        purchase.userId,
-
-      tokens:
-        purchase.tokens,
-
-      amount:
-        String(
-          purchase.amount
-        ),
-
-      paymentStatus:
-        purchase.paymentStatus,
-
-      allowFailedFundingRetry,
-    }
-  );
-
-  if (
-    purchase.paymentStatus ===
-    "PAID_FUNDED"
-  ) {
     return {
       status:
         "COMPLETED" as const,
 
       purchaseId,
-
-      tokens:
-        purchase.tokens,
     };
   }
 
   if (
-    purchase.paymentStatus ===
-    "PAID_FUNDING_FAILED"
-  ) {
-    if (
-      !allowFailedFundingRetry
-    ) {
-      throw new Error(
-        "TOKEN_PURCHASE_FUNDING_FAILED"
-      );
-    }
-
-    await db.orm.public.TokenPurchase
-      .where({
-        id:
-          purchaseId,
-      })
-      .update({
-        paymentStatus:
-          "PAID_FUNDING",
-      });
-
-    console.log(
-      "Authorized funding retry: purchase moved to PAID_FUNDING",
-      {
-        purchaseId,
-      }
-    );
-  }
-
-  const currentPurchase =
-    await db.orm.public.TokenPurchase
-      .where({
-        id:
-          purchaseId,
-      })
-      .first();
-
-  if (!currentPurchase) {
-    throw new Error(
-      "TOKEN_PURCHASE_NOT_FOUND"
-    );
-  }
-
-  if (
-    currentPurchase.paymentStatus !==
-      "PAID" &&
-    currentPurchase.paymentStatus !==
+    purchase.status !== "PAID" &&
+    purchase.status !==
       "PAID_FUNDING"
   ) {
     throw new Error(
@@ -1645,50 +1264,51 @@ export async function processPaidTokenPurchase(
   }
 
   const externalOrderId =
-    `onlysign_ppq_funding_${currentPurchase.id}`;
+    `onlysign_ppq_funding_${purchase.id}`;
 
   const operationAmount =
-    currentPurchase.tokens *
+    purchase.tokens *
     PPQCHECK_BUDGET_PER_TOKEN;
 
+  /*
+   * Verifica il saldo PPQCheck e,
+   * se necessario, crea il funding.
+   */
   const funding =
     await ensurePpqcheckFunding(
       operationAmount,
 
       externalOrderId,
 
-      currentPurchase.id,
-
-      allowFailedFundingRetry
+      purchase.id
     );
 
+  /*
+   * Funding ancora in corso.
+   */
   if (
     funding.status ===
     "PENDING"
   ) {
-    console.log(
-      "Paymos PPQCheck funding pending:",
-      {
-        purchaseId:
-          currentPurchase.id,
-
-        fundingAmount:
-          funding.fundingAmount,
-
-        withdrawalId:
-          funding.withdrawalId,
-      }
-    );
+    await db.orm.public.TokenPurchase
+      .where({
+        id:
+          purchase.id,
+      })
+      .update({
+        status:
+          "PAID_FUNDING",
+      });
 
     return {
       status:
         "PENDING" as const,
 
       purchaseId:
-        currentPurchase.id,
+        purchase.id,
 
       tokens:
-        currentPurchase.tokens,
+        purchase.tokens,
 
       fundingAmount:
         funding.fundingAmount,
@@ -1698,70 +1318,55 @@ export async function processPaidTokenPurchase(
     };
   }
 
-  const result =
-    await finalizeTokenPurchase(
-      currentPurchase.id
-    );
-
-  return {
-    status:
-      "COMPLETED" as const,
-
-    ...result,
-  };
+  /*
+   * Non serve altro funding:
+   * verifichiamo la copertura reale
+   * e finalizziamo.
+   */
+  return finalizeTokenPurchase(
+    purchase.id
+  );
 }
 
+/*
+ * Gestisce un funding fallito.
+ *
+ * Il funding e il purchase sono entrambi
+ * dati temporanei e vengono eliminati.
+ */
 export async function markFundingFailed(
   purchaseId: number
 ) {
-  const transaction =
-    await getFundingTransaction(
-      purchaseId
-    );
+  await db.transaction(
+    async (tx) => {
+      const fundingTransaction =
+        await tx.orm.public.PpqcheckTransaction
+          .where({
+            tokenPurchaseId:
+              purchaseId,
 
-  if (!transaction) {
-    throw new Error(
-      "PPQCHECK_FUNDING_TRANSACTION_NOT_FOUND"
-    );
-  }
+            type:
+              "ADJUSTMENT",
+          })
+          .first();
 
-  await db.orm.public.PpqcheckTransaction
-    .where({
-      id:
-        transaction.id,
-    })
-    .update({
-      fundingStatus:
-        "FAILED",
-    });
+      if (fundingTransaction) {
+        await tx.orm.public.PpqcheckTransaction
+          .where({
+            id:
+              fundingTransaction.id,
+          })
+          .delete();
+      }
 
-  const purchase =
-    await db.orm.public.TokenPurchase
-      .where({
-        id:
-          purchaseId,
-      })
-      .first();
-
-  if (
-    purchase &&
-    (
-      purchase.paymentStatus ===
-        "PAID" ||
-      purchase.paymentStatus ===
-        "PAID_FUNDING"
-    )
-  ) {
-    await db.orm.public.TokenPurchase
-      .where({
-        id:
-          purchaseId,
-      })
-      .update({
-        paymentStatus:
-          "PAID_FUNDING_FAILED",
-      });
-  }
+      await tx.orm.public.TokenPurchase
+        .where({
+          id:
+            purchaseId,
+        })
+        .delete();
+    }
+  );
 
   return {
     status:

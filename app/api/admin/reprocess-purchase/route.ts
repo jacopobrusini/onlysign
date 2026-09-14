@@ -4,10 +4,9 @@ import { processPaidTokenPurchase } from "@/lib/sync-credit";
 
 export async function POST(request: Request) {
   try {
-    const recoverySecret =
-      request.headers.get(
-        "x-recovery-secret"
-      );
+    const recoverySecret = request.headers.get(
+      "x-recovery-secret"
+    );
 
     if (
       !recoverySecret ||
@@ -24,22 +23,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const body =
-      await request.json();
+    const body = await request.json();
 
-    const purchaseId =
-      Number(body.purchaseId);
+    const purchaseId = Number(body.purchaseId);
 
     if (
-      !Number.isInteger(
-        purchaseId
-      ) ||
+      !Number.isInteger(purchaseId) ||
       purchaseId <= 0
     ) {
       return NextResponse.json(
         {
-          error:
-            "Invalid purchaseId",
+          error: "Invalid purchaseId",
         },
         {
           status: 400,
@@ -50,69 +44,33 @@ export async function POST(request: Request) {
     const purchase =
       await db.orm.public.TokenPurchase
         .where({
-          id:
-            purchaseId,
+          id: purchaseId,
         })
         .first();
 
+    /*
+     * Un purchase assente può significare che
+     * è già stato completato e cancellato.
+     *
+     * Questo rende il recovery idempotente.
+     */
     if (!purchase) {
-      return NextResponse.json(
-        {
-          error:
-            "Purchase not found",
-        },
-        {
-          status: 404,
-        }
-      );
-    }
-
-    if (
-      purchase.status !==
-      "PAID"
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Purchase is not confirmed as paid",
-          status:
-            purchase.status,
-        },
-        {
-          status: 409,
-        }
-      );
-    }
-
-    if (
-      purchase.paymentStatus ===
-      "PAID_FUNDED"
-    ) {
       return NextResponse.json({
         ok: true,
-
-        alreadyCompleted:
-          true,
-
+        alreadyCompleted: true,
         purchaseId,
       });
     }
 
     if (
-      purchase.paymentStatus !==
-        "PAID" &&
-      purchase.paymentStatus !==
-        "PAID_FUNDING" &&
-      purchase.paymentStatus !==
-        "PAID_FUNDING_FAILED"
+      purchase.status !== "PAID" &&
+      purchase.status !== "PAID_FUNDING"
     ) {
       return NextResponse.json(
         {
           error:
-            "Purchase is not eligible for recovery",
-
-          paymentStatus:
-            purchase.paymentStatus,
+            "Purchase is not confirmed as paid",
+          status: purchase.status,
         },
         {
           status: 409,
@@ -124,38 +82,28 @@ export async function POST(request: Request) {
       "=== AUTHORIZED PURCHASE RECOVERY START ===",
       {
         purchaseId,
-
-        status:
-          purchase.status,
-
-        paymentStatus:
-          purchase.paymentStatus,
+        status: purchase.status,
+        userId: purchase.userId,
+        tokens: purchase.tokens,
       }
     );
 
     const result =
       await processPaidTokenPurchase(
-        purchaseId,
-        {
-          allowFailedFundingRetry:
-            true,
-        }
+        purchaseId
       );
 
     console.log(
       "=== AUTHORIZED PURCHASE RECOVERY RESULT ===",
       {
         purchaseId,
-
         result,
       }
     );
 
     return NextResponse.json({
       ok: true,
-
       purchaseId,
-
       result,
     });
   } catch (error) {
@@ -167,7 +115,6 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-
         error:
           error instanceof Error
             ? error.message

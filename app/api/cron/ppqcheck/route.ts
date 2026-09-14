@@ -5,8 +5,7 @@ import {
   finalizeTokenPurchase,
 } from "@/lib/sync-credit";
 
-export const dynamic =
-  "force-dynamic";
+export const dynamic = "force-dynamic";
 
 export async function GET(
   request: Request
@@ -22,7 +21,6 @@ export async function GET(
     return NextResponse.json(
       {
         ok: false,
-
         error:
           "CRON_SECRET_MISSING",
       },
@@ -44,9 +42,7 @@ export async function GET(
     return NextResponse.json(
       {
         ok: false,
-
-        error:
-          "UNAUTHORIZED",
+        error: "UNAUTHORIZED",
       },
       {
         status: 401,
@@ -61,8 +57,7 @@ export async function GET(
   const purchases =
     await db.orm.public.TokenPurchase
       .where({
-        paymentStatus:
-          "PAID_FUNDING",
+        status: "PAID_FUNDING",
       })
       .all();
 
