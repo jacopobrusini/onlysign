@@ -165,49 +165,102 @@ export async function getSyncCredit() {
 }
 
 /*
- * Calcola quanto funding PPQCheck è già riservato
- * da altri acquisti ancora in elaborazione.
+ * Calcola l'esposizione totale dei token che
+ * OnlySign deve coprire su PPQCheck.
+ *
+ * Vengono considerati:
+ *
+ * 1. tutti i token già presenti nei saldi
+ *    degli utenti;
+ *
+ * 2. tutti i token degli acquisti ancora
+ *    presenti in TokenPurchase.
+ *
+ * I TokenPurchase già completati non vengono
+ * più conteggiati perché vengono eliminati
+ * e i relativi token sono già dentro User.tokenBalance.
  */
-async function getPendingReservedFunding(
-  excludePurchaseId?: number
-) {
-  const pendingTransactions =
-    await db.orm.public.PpqcheckTransaction
+async function getTotalTokensToCover() {
+  const users =
+    await db.orm.public.User
+      .all();
+
+  const purchases =
+    await db.orm.public.TokenPurchase
       .where({
-        type: "ADJUSTMENT",
-        fundingStatus: "PENDING",
+        status: "PAID",
       })
       .all();
 
-  let reservedAmount = 0;
+  const fundingPurchases =
+    await db.orm.public.TokenPurchase
+      .where({
+        status: "PAID_FUNDING",
+      })
+      .all();
+
+  let tokenBalanceTotal =
+    0;
 
   for (
-    const transaction of pendingTransactions
+    const user of users
   ) {
-    if (
-      excludePurchaseId !== undefined &&
-      transaction.tokenPurchaseId ===
-        excludePurchaseId
-    ) {
-      continue;
-    }
-
-    const amount =
-      Number(transaction.amount);
+    const tokenBalance =
+      Number(
+        user.tokenBalance
+      );
 
     if (
-      !Number.isFinite(amount) ||
-      amount <= 0
+      !Number.isFinite(
+        tokenBalance
+      ) ||
+      tokenBalance < 0
     ) {
-      continue;
+      throw new Error(
+        "INVALID_USER_TOKEN_BALANCE"
+      );
     }
 
-    reservedAmount += amount;
+    tokenBalanceTotal +=
+      tokenBalance;
   }
 
-  return Number(
-    reservedAmount.toFixed(2)
-  );
+  let purchaseTokenTotal =
+    0;
+
+  for (
+    const purchase of [
+      ...purchases,
+      ...fundingPurchases,
+    ]
+  ) {
+    const tokens =
+      Number(
+        purchase.tokens
+      );
+
+    if (
+      !Number.isFinite(tokens) ||
+      tokens <= 0
+    ) {
+      throw new Error(
+        "INVALID_TOKEN_PURCHASE_TOKENS"
+      );
+    }
+
+    purchaseTokenTotal +=
+      tokens;
+  }
+
+  return {
+    tokenBalanceTotal,
+
+    purchaseTokenTotal,
+
+    totalTokensToCover:
+      tokenBalanceTotal +
+      purchaseTokenTotal,
+  };
 }
 
 /*
@@ -537,88 +590,29 @@ async function getFundingTransaction(
 
 /*
  * Determina se il saldo PPQCheck disponibile
- * è sufficiente per coprire il nuovo token.
+ * copre l'esposizione totale dei token.
  *
- * Se non è sufficiente:
+ * Il nuovo acquisto viene considerato insieme
+ * a tutti gli altri TokenPurchase ancora esistenti
+ * e a tutti gli User.tokenBalance.
  *
- * 1. crea un deposito PPQCheck
- * 2. crea il withdrawal Paymos
- * 3. salva il funding temporaneo
- * 4. attende il webhook Paymos
+ * Se il margine disponibile è sufficiente
+ * per l'intera nuova operazione:
+ *
+ *   nessun withdrawal.
+ *
+ * Se invece il margine è insufficiente:
+ *
+ *   withdrawal = operationAmount
+ *
+ * Non viene mai effettuato un micro-deposito
+ * della sola differenza.
  */
 async function ensurePpqcheckFunding(
   operationAmount: number,
   externalOrderId: string,
   purchaseId: number
 ) {
-  const syncCredit =
-    await getSyncCredit();
-
-  const currentCoverage =
-    Number(
-      syncCredit.ppqCoverage
-    );
-
-  if (
-    !Number.isFinite(
-      currentCoverage
-    )
-  ) {
-    throw new Error(
-      "INVALID_SYNC_CREDIT_COVERAGE"
-    );
-  }
-
-  const targetCoverage =
-    currentCoverage +
-    operationAmount;
-
-  const actualBalance =
-    await getPpqcheckBalance();
-
-  const reservedFunding =
-    await getPendingReservedFunding(
-      purchaseId
-    );
-
-  const availableBalance =
-    Math.max(
-      0,
-      actualBalance -
-        reservedFunding
-    );
-
-  const fundingNeeded =
-    Math.max(
-      0,
-      operationAmount -
-        availableBalance
-    );
-
-  /*
-   * Il saldo disponibile copre già
-   * l'operazione.
-   */
-  if (
-    fundingNeeded <= 0
-  ) {
-    return {
-      status:
-        "COMPLETED" as const,
-
-      fundingAmount:
-        0,
-
-      targetCoverage,
-
-      actualBalance,
-
-      reservedFunding,
-
-      availableBalance,
-    };
-  }
-
   const existing =
     await getFundingTransaction(
       purchaseId
@@ -635,10 +629,6 @@ async function ensurePpqcheckFunding(
       );
     }
 
-    /*
-     * Funding già inviato e ancora
-     * in attesa del completamento.
-     */
     if (
       existing.fundingStatus ===
       "PENDING"
@@ -660,14 +650,6 @@ async function ensurePpqcheckFunding(
             existing.amount
           ),
 
-        targetCoverage,
-
-        actualBalance,
-
-        reservedFunding,
-
-        availableBalance,
-
         withdrawalId:
           existing.paymosWithdrawalId,
 
@@ -677,9 +659,6 @@ async function ensurePpqcheckFunding(
       };
     }
 
-    /*
-     * Il funding risulta già completato.
-     */
     if (
       existing.fundingStatus ===
       "COMPLETED"
@@ -693,14 +672,6 @@ async function ensurePpqcheckFunding(
             existing.amount
           ),
 
-        targetCoverage,
-
-        actualBalance,
-
-        reservedFunding,
-
-        availableBalance,
-
         withdrawalId:
           existing.paymosWithdrawalId ??
           undefined,
@@ -711,13 +682,6 @@ async function ensurePpqcheckFunding(
       };
     }
 
-    /*
-     * Un funding FAILED non dovrebbe
-     * normalmente arrivare qui perché il
-     * webhook lo elimina insieme al purchase.
-     *
-     * Lo eliminiamo comunque per sicurezza.
-     */
     if (
       existing.fundingStatus ===
       "FAILED"
@@ -731,9 +695,65 @@ async function ensurePpqcheckFunding(
     }
   }
 
+  const exposure =
+    await getTotalTokensToCover();
+
+  const requiredCoverage =
+    exposure.totalTokensToCover *
+    PPQCHECK_BUDGET_PER_TOKEN;
+
+  const actualBalance =
+    await getPpqcheckBalance();
+
+  const margin =
+    actualBalance -
+    requiredCoverage;
+
+  /*
+   * Il saldo PPQCheck copre già
+   * l'intera nuova operazione.
+   *
+   * Non viene effettuato alcun withdrawal.
+   */
+  if (
+    margin >= operationAmount
+  ) {
+    return {
+      status:
+        "COMPLETED" as const,
+
+      fundingAmount:
+        0,
+
+      totalTokensToCover:
+        exposure.totalTokensToCover,
+
+      tokenBalanceTotal:
+        exposure.tokenBalanceTotal,
+
+      purchaseTokenTotal:
+        exposure.purchaseTokenTotal,
+
+      requiredCoverage,
+
+      actualBalance,
+
+      margin,
+    };
+  }
+
+  /*
+   * Il margine non è sufficiente.
+   *
+   * Viene finanziato l'intero importo
+   * dell'operazione, non soltanto la differenza.
+   */
+  const fundingAmount =
+    operationAmount;
+
   const deposit =
     await createPpqcheckDeposit(
-      fundingNeeded
+      fundingAmount
     );
 
   const transaction =
@@ -745,7 +765,7 @@ async function ensurePpqcheckFunding(
         "ADJUSTMENT",
 
       amount:
-        fundingNeeded.toFixed(2),
+        fundingAmount.toFixed(2),
 
       description:
         "PPQCheck USDT funding",
@@ -781,7 +801,7 @@ async function ensurePpqcheckFunding(
   try {
     withdrawal =
       await createPaymosWithdrawal(
-        fundingNeeded,
+        fundingAmount,
 
         deposit.address,
 
@@ -832,16 +852,22 @@ async function ensurePpqcheckFunding(
     status:
       "PENDING" as const,
 
-    fundingAmount:
-      fundingNeeded,
+    fundingAmount,
 
-    targetCoverage,
+    totalTokensToCover:
+      exposure.totalTokensToCover,
+
+    tokenBalanceTotal:
+      exposure.tokenBalanceTotal,
+
+    purchaseTokenTotal:
+      exposure.purchaseTokenTotal,
+
+    requiredCoverage,
 
     actualBalance,
 
-    reservedFunding,
-
-    availableBalance,
+    margin,
 
     withdrawalId,
 
@@ -967,42 +993,26 @@ export async function finalizeTokenPurchase(
     purchase.tokens *
     PPQCHECK_BUDGET_PER_TOKEN;
 
-  const syncCredit =
-    await getSyncCredit();
+  const exposure =
+    await getTotalTokensToCover();
 
-  const currentCoverage =
-    Number(
-      syncCredit.ppqCoverage
-    );
-
-  const currentAmount =
-    Number(
-      syncCredit.ppqAmount
-    );
-
-  if (
-    !Number.isFinite(
-      currentCoverage
-    ) ||
-    !Number.isFinite(
-      currentAmount
-    )
-  ) {
-    throw new Error(
-      "INVALID_SYNC_CREDIT"
-    );
-  }
-
-  const targetCoverage =
-    currentCoverage +
-    operationAmount;
+  const requiredCoverage =
+    exposure.totalTokensToCover *
+    PPQCHECK_BUDGET_PER_TOKEN;
 
   /*
-   * Controlliamo il saldo reale PPQCheck.
+   * Verifica il saldo reale PPQCheck.
+   *
+   * Se il funding è stato effettuato,
+   * aspettiamo che il saldo raggiunga
+   * la copertura richiesta.
+   *
+   * Se invece il saldo era già sufficiente,
+   * questa verifica termina immediatamente.
    */
   const ppqBalance =
     await waitForPpqcheckCoverage(
-      targetCoverage
+      requiredCoverage
     );
 
   /*
@@ -1032,7 +1042,12 @@ export async function finalizeTokenPurchase(
       tokens:
         purchase.tokens,
 
-      targetCoverage,
+      operationAmount,
+
+      totalTokensToCover:
+        exposure.totalTokensToCover,
+
+      requiredCoverage,
 
       ppqBalance:
         ppqBalance.balance,
@@ -1220,7 +1235,10 @@ export async function finalizeTokenPurchase(
     tokens:
       purchase.tokens,
 
-    targetCoverage,
+    totalTokensToCover:
+      exposure.totalTokensToCover,
+
+    requiredCoverage,
 
     ppqBalance:
       ppqBalance.balance,
