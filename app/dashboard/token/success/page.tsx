@@ -327,14 +327,14 @@ export default function TokenSuccessPage() {
                             state={
                               fundingStep
                             }
-                            title="Funding PPQCheck"
+                            title="Ordine in elaborazione"
                             description={
                               fundingStep ===
                               "completed"
                                 ? "Il funding è stato completato."
                                 : fundingStep ===
                                   "processing"
-                                ? "Stiamo completando il funding del provider."
+                                ? "Stiamo completando la preparazione del tuo ordine."
                                 : fundingStep ===
                                   "failed"
                                 ? "Si è verificato un problema durante il funding."
