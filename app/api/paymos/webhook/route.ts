@@ -77,10 +77,13 @@ function verifyWebhookSignature(
     return false;
   }
 
-  const secret = process.env.PAYMOS_WEBHOOK_SECRET;
+  const secret =
+    process.env.PAYMOS_WEBHOOK_SECRET;
 
   if (!secret) {
-    throw new Error("PAYMOS_WEBHOOK_SECRET_MISSING");
+    throw new Error(
+      "PAYMOS_WEBHOOK_SECRET_MISSING"
+    );
   }
 
   const signedPayload =
@@ -446,6 +449,59 @@ async function handleWithdrawal(
     }
   );
 
+  /*
+   * Keep the Paymos withdrawal status
+   * synchronized in our database.
+   */
+  const fundingTransactions =
+    await db.orm.public.PpqcheckTransaction
+      .where({
+        tokenPurchaseId: purchaseId,
+      })
+      .all();
+
+  const fundingTransaction =
+    fundingTransactions[0];
+
+  if (!fundingTransaction) {
+    console.error(
+      "Paymos withdrawal: PPQCheck transaction not found",
+      {
+        purchaseId,
+        withdrawalId:
+          data.withdrawal_id,
+        externalOrderId,
+      }
+    );
+
+    return {
+      processed: false,
+      ignored: true,
+    };
+  }
+
+  if (data.withdrawal_id) {
+    await db.orm.public.PpqcheckTransaction
+      .where({
+        id: fundingTransaction.id,
+      })
+      .update({
+        paymosWithdrawalId:
+          data.withdrawal_id,
+        paymosWithdrawalStatus:
+          status ?? "unknown",
+      });
+  } else if (status) {
+    await db.orm.public.PpqcheckTransaction
+      .where({
+        id: fundingTransaction.id,
+      })
+      .update({
+        paymosWithdrawalStatus:
+          status,
+      });
+  }
+
   if (
     status === "failed" ||
     status === "cancelled"
@@ -474,6 +530,42 @@ async function handleWithdrawal(
     status === "completed" &&
     data.is_final === true
   ) {
+    /*
+     * The Paymos withdrawal is now confirmed.
+     * The customer has already paid, and the
+     * PPQCheck funding transfer is completed.
+     *
+     * Move the purchase into PAID_FUNDING
+     * before trying to finalize it.
+     */
+    await db.orm.public.PpqcheckTransaction
+      .where({
+        id: fundingTransaction.id,
+      })
+      .update({
+        fundingStatus: "PENDING",
+        paymosWithdrawalStatus:
+          "completed",
+      });
+
+    await db.orm.public.TokenPurchase
+      .where({
+        id: purchaseId,
+      })
+      .update({
+        paymentStatus:
+          "PAID_FUNDING",
+      });
+
+    console.log(
+      "Paymos PPQCheck funding marked as PAID_FUNDING",
+      {
+        purchaseId,
+        withdrawalId:
+          data.withdrawal_id,
+      }
+    );
+
     const result =
       await finalizeTokenPurchase(
         purchaseId
@@ -687,7 +779,8 @@ export async function POST(
 
     return NextResponse.json(
       {
-        error: "Webhook processing failed",
+        error:
+          "Webhook processing failed",
       },
       {
         status: 500,
