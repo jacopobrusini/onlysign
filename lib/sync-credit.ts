@@ -21,17 +21,12 @@ const PPQCHECK_BUDGET_PER_TOKEN =
   1.4;
 
 const PPQCHECK_BALANCE_POLL_ATTEMPTS =
-  25;
+  11;
 
-const PPQCHECK_BALANCE_POLL_DELAYS_MS =
-  [
-    0,
-    3000,
-    5000,
-    8000,
-    12000,
-    15000,
-  ];
+const PPQCHECK_BALANCE_POLL_DELAYS_MS = [
+  0,
+  120000,
+];
 
 type PaymosWithdrawalResponse = {
   withdrawal_id?: string;
