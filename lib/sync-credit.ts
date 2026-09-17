@@ -60,6 +60,9 @@ function sleep(
  * SyncCredit è la contabilità interna di OnlySign,
  * mentre questo endpoint restituisce il saldo reale
  * disponibile sul wallet PPQCheck.
+ *
+ * Viene utilizzato availableBalance quando presente,
+ * con fallback a balance.
  */
 async function getPpqcheckBalance() {
   const apiKey =
@@ -138,6 +141,13 @@ async function getPpqcheckBalance() {
 /*
  * Recupera o inizializza la contabilità interna
  * della copertura PPQCheck.
+ *
+ * Questa funzione NON sincronizza automaticamente
+ * il saldo PPQCheck.
+ *
+ * Per una sincronizzazione reale usare:
+ *
+ *   syncCurrentSyncCredit()
  */
 export async function getSyncCredit() {
   let syncCredit =
@@ -169,11 +179,13 @@ export async function getSyncCredit() {
  *    degli utenti;
  *
  * 2. tutti i token degli acquisti ancora
- *    presenti in TokenPurchase.
+ *    presenti in TokenPurchase con stato
+ *    PAID o PAID_FUNDING.
  *
  * I TokenPurchase già completati non vengono
  * più conteggiati perché vengono eliminati
- * e i relativi token sono già dentro User.tokenBalance.
+ * e i relativi token sono già dentro
+ * User.tokenBalance.
  */
 async function getTotalTokensToCover() {
   const users =
@@ -259,6 +271,69 @@ async function getTotalTokensToCover() {
 }
 
 /*
+ * Sincronizza SyncCredit con lo stato reale
+ * corrente di OnlySign + PPQCheck.
+ *
+ * ppqAmount:
+ *   saldo reale spendibile PPQCheck.
+ *
+ * ppqCoverage:
+ *   copertura richiesta in base all'esposizione
+ *   corrente dei token.
+ *
+ * IMPORTANTE:
+ * SyncCredit NON è un accumulatore.
+ *
+ * I valori vengono sempre ricalcolati da zero.
+ */
+export async function syncCurrentSyncCredit() {
+  const [
+    actualPpqBalance,
+    exposure,
+  ] = await Promise.all([
+    getPpqcheckBalance(),
+    getTotalTokensToCover(),
+  ]);
+
+  const requiredCoverage =
+    exposure.totalTokensToCover *
+    PPQCHECK_BUDGET_PER_TOKEN;
+
+  const ppqAmount =
+    actualPpqBalance.toFixed(2);
+
+  const ppqCoverage =
+    requiredCoverage.toFixed(2);
+
+  const existing =
+    await db.orm.public.SyncCredit
+      .where({
+        id: 1,
+      })
+      .first();
+
+  if (!existing) {
+    return db.orm.public.SyncCredit.create({
+      id: 1,
+
+      ppqAmount,
+
+      ppqCoverage,
+    });
+  }
+
+  return db.orm.public.SyncCredit
+    .where({
+      id: 1,
+    })
+    .update({
+      ppqAmount,
+
+      ppqCoverage,
+    });
+}
+
+/*
  * Chiede a PPQCheck di creare un deposito USDT
  * per l'importo necessario.
  */
@@ -310,6 +385,7 @@ async function createPpqcheckDeposit(
 
         body: JSON.stringify({
           amount,
+
           network,
         }),
 
@@ -939,10 +1015,15 @@ async function waitForPpqcheckCoverage(
  *
  * Operazioni atomiche:
  *
- * 1. aggiorna SyncCredit
- * 2. incrementa User.tokenBalance
- * 3. elimina PpqcheckTransaction
- * 4. elimina TokenPurchase
+ * 1. incrementa User.tokenBalance
+ * 2. elimina PpqcheckTransaction
+ * 3. elimina TokenPurchase
+ *
+ * SyncCredit NON viene aggiornato dentro
+ * la transazione.
+ *
+ * Dopo il commit viene ricalcolato da zero
+ * tramite syncCurrentSyncCredit().
  *
  * NON viene creata una TokenTransaction PURCHASE.
  */
@@ -1028,6 +1109,15 @@ export async function finalizeTokenPurchase(
           "PAID_FUNDING",
       });
 
+    /*
+     * SyncCredit viene sincronizzato anche
+     * mentre il purchase rimane aperto.
+     *
+     * In questo stato il purchase viene
+     * correttamente incluso nella coverage.
+     */
+    await syncCurrentSyncCredit();
+
     return {
       status:
         "PENDING" as const,
@@ -1052,9 +1142,13 @@ export async function finalizeTokenPurchase(
   /*
    * Tutto è coperto.
    *
-   * Ora aggiorniamo la contabilità e
-   * accreditiamo i token nella stessa
-   * transazione database.
+   * Ora aggiorniamo il database:
+   *
+   * User.tokenBalance += tokens
+   *
+   * e poi eliminiamo il TokenPurchase.
+   *
+   * NON aggiorniamo SyncCredit qui dentro.
    */
   await db.transaction(
     async (tx) => {
@@ -1084,81 +1178,6 @@ export async function finalizeTokenPurchase(
           "TOKEN_PURCHASE_NOT_PAID"
         );
       }
-
-      const currentSyncCredit =
-        await tx.orm.public.SyncCredit
-          .where({
-            id: 1,
-          })
-          .first();
-
-      if (!currentSyncCredit) {
-        throw new Error(
-          "SYNC_CREDIT_NOT_INITIALIZED"
-        );
-      }
-
-      const txCoverage =
-        Number(
-          currentSyncCredit.ppqCoverage
-        );
-
-      const txAmount =
-        Number(
-          currentSyncCredit.ppqAmount
-        );
-
-      if (
-        !Number.isFinite(
-          txCoverage
-        ) ||
-        !Number.isFinite(
-          txAmount
-        )
-      ) {
-        throw new Error(
-          "INVALID_SYNC_CREDIT"
-        );
-      }
-
-      const newCoverage =
-        txCoverage +
-        operationAmount;
-
-      const newAmount =
-        txAmount +
-        operationAmount;
-
-      /*
-       * Aggiorna la copertura interna
-       * PPQCheck.
-       */
-      const syncCreditUpdate =
-        tx.sql.public.syncCredit
-          .update((f, fns) => ({
-            ppqAmount:
-              fns.raw`${newAmount.toFixed(2)}`
-                .returns(
-                  "pg/numeric@1"
-                ),
-
-            ppqCoverage:
-              fns.raw`${newCoverage.toFixed(2)}`
-                .returns(
-                  "pg/numeric@1"
-                ),
-          }))
-          .where((f, fns) =>
-            fns.eq(
-              f.id,
-              currentSyncCredit.id
-            )
-          )
-          .build();
-
-      await tx.execute(
-        syncCreditUpdate
-      );
 
       /*
        * Accredita i token all'utente.
@@ -1210,7 +1229,11 @@ export async function finalizeTokenPurchase(
 
       /*
        * Il TokenPurchase non è uno storico.
+       *
        * Una volta completato viene eliminato.
+       *
+       * I token sono ormai dentro
+       * User.tokenBalance.
        */
       await tx.orm.public.TokenPurchase
         .where({
@@ -1220,6 +1243,20 @@ export async function finalizeTokenPurchase(
         .delete();
     }
   );
+
+  /*
+   * La transazione è terminata.
+   *
+   * Adesso lo stato DB è quello definitivo:
+   *
+   * User.tokenBalance contiene i nuovi token
+   * TokenPurchase non esiste più.
+   *
+   * Ricalcoliamo quindi SyncCredit da zero.
+   *
+   * Questo evita qualsiasi doppio conteggio.
+   */
+  await syncCurrentSyncCredit();
 
   return {
     status:
@@ -1313,6 +1350,13 @@ export async function processPaidTokenPurchase(
           "PAID_FUNDING",
       });
 
+    /*
+     * Il purchase è ancora aperto,
+     * quindi syncCurrentSyncCredit()
+     * lo includerà nella coverage.
+     */
+    await syncCurrentSyncCredit();
+
     return {
       status:
         "PENDING" as const,
@@ -1380,6 +1424,12 @@ export async function markFundingFailed(
         .delete();
     }
   );
+
+  /*
+   * Il purchase è stato eliminato,
+   * quindi ricalcoliamo l'esposizione corrente.
+   */
+  await syncCurrentSyncCredit();
 
   return {
     status:
