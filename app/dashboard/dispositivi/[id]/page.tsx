@@ -92,7 +92,6 @@ className="min-h-screen bg-cover bg-center bg-fixed text-white"
 style={{ backgroundImage: "url('/background.png')" }}
 > <Header />
 
-```
   <section className="px-6 pb-16 pt-28">
     <div className="mx-auto max-w-4xl">
       {/* Titolo */}
