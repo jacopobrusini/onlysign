@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/prisma/db";
 import { getSession } from "@/lib/session";
-import { param } from "@prisma/orm-postgres/relational-core/expression";
 
-const PPQCHECK_API_URL =
-  "https://br.api-developer.dev/v1/integration/certificate";
-
-const PPQCHECK_BUDGET_PER_TOKEN = 1.4;
+const PPQCHECK_API_BASE =
+  "https://br.api-developer.dev/v1/integration";
 
 type PpqcheckCreateResponse = {
   id?: string;
@@ -18,7 +15,28 @@ type PpqcheckCreateResponse = {
   fellBack?: boolean;
 };
 
-function getPpqcheckStatus(status: string | undefined) {
+type PpqcheckCertificateResponse = {
+  id?: string;
+  code?: string;
+  status?: string;
+  price?: number | string;
+  currency?: string;
+  requestedCurrency?: string;
+  fellBack?: boolean;
+  zip?: string | null;
+  filename?: string | null;
+};
+
+const POLL_DELAYS = [
+  0,
+  5000,
+  10000,
+  15000,
+  20000,
+  30000,
+];
+
+function getStatus(status: string | undefined) {
   return status?.toLowerCase() ?? "";
 }
 
@@ -62,6 +80,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    /*
+     * Il dispositivo e il tipo di certificato vengono
+     * verificati direttamente nel database.
+     *
+     * Il frontend NON decide:
+     * - quanti token costa
+     * - quale certificateId PPQCheck usare
+     */
+
     const [device, certificateType] = await Promise.all([
       db.orm.public.Device
         .where({
@@ -92,23 +119,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const requiredTokens = certificateType.tokens;
+    /*
+     * Tutti i dati commerciali/tecnici del certificato
+     * arrivano dal DB.
+     */
 
-    const theoreticalFunding =
-      requiredTokens * PPQCHECK_BUDGET_PER_TOKEN;
+    const requiredTokens = certificateType.tokens;
+    const ppqcheckCertificateId =
+      certificateType.ppqcheckId;
 
     /*
      * ─────────────────────────────────────────────
-     * TRANSAZIONE ATOMICA
+     * RISERVA TOKEN + CREA ORDINE
      * ─────────────────────────────────────────────
      */
 
     const reservation = await db.transaction(async (tx) => {
-      const user = await tx.orm.public.User
-        .where({
-          id: session.user.id,
-        })
-        .first();
+      const user =
+        await tx.orm.public.User
+          .where({
+            id: session.user.id,
+          })
+          .first();
 
       if (!user) {
         throw new Error("USER_NOT_FOUND");
@@ -118,32 +150,8 @@ export async function POST(request: NextRequest) {
         throw new Error("INSUFFICIENT_TOKENS");
       }
 
-      const syncCredit =
-        await tx.orm.public.SyncCredit
-          .where({
-            id: 1,
-          })
-          .first();
-
-      if (!syncCredit) {
-        throw new Error("SYNC_CREDIT_NOT_INITIALIZED");
-      }
-
-      const coverage = Number(syncCredit.ppqCoverage);
-
-      if (!Number.isFinite(coverage)) {
-        throw new Error("INVALID_SYNC_CREDIT");
-      }
-
-      if (coverage < theoreticalFunding) {
-        throw new Error("INSUFFICIENT_PPQ_COVERAGE");
-      }
-
       /*
-       * Riserva token.
-       *
-       * La condizione sul saldo viene eseguita
-       * direttamente dal database.
+       * Scala i token direttamente dal database.
        */
 
       const tokenUpdate =
@@ -167,10 +175,8 @@ export async function POST(request: NextRequest) {
       await tx.execute(tokenUpdate);
 
       /*
-       * Verifichiamo il saldo dopo l'UPDATE.
-       *
-       * Se l'UPDATE condizionale non ha modificato
-       * l'utente, il saldo rimane invariato.
+       * Verifica che la prenotazione sia realmente
+       * avvenuta.
        */
 
       const updatedUser =
@@ -192,70 +198,7 @@ export async function POST(request: NextRequest) {
       }
 
       /*
-       * Riserva copertura PPQCheck.
-       */
-
-      const theoreticalFundingParam = param(
-        theoreticalFunding.toFixed(2),
-        {
-          codecId: "pg/numeric@1",
-        }
-      );
-
-      const coverageUpdate =
-        tx.sql.public.syncCredit
-          .update((f, fns) => ({
-            ppqCoverage:
-              fns.raw`${f.ppqCoverage} - ${theoreticalFundingParam}`
-                .returns("pg/numeric@1"),
-          }))
-          .where((f, fns) =>
-            fns.and(
-              fns.eq(f.id, syncCredit.id),
-              fns.raw`${f.ppqCoverage} >= ${theoreticalFundingParam}`
-                .returns("pg/bool@1")
-            )
-          )
-          .build();
-
-      await tx.execute(coverageUpdate);
-
-      /*
-       * Verifichiamo la copertura dopo l'UPDATE.
-       */
-
-      const updatedSyncCredit =
-        await tx.orm.public.SyncCredit
-          .where({
-            id: syncCredit.id,
-          })
-          .first();
-
-      if (!updatedSyncCredit) {
-        throw new Error(
-          "SYNC_CREDIT_NOT_INITIALIZED"
-        );
-      }
-
-      const expectedCoverage =
-        coverage - theoreticalFunding;
-
-      const actualCoverage =
-        Number(updatedSyncCredit.ppqCoverage);
-
-      if (
-        !Number.isFinite(actualCoverage) ||
-        Math.abs(
-          actualCoverage - expectedCoverage
-        ) > 0.000001
-      ) {
-        throw new Error(
-          "COVERAGE_RESERVATION_FAILED"
-        );
-      }
-
-      /*
-       * Crea l'ordine.
+       * Crea l'ordine locale.
        */
 
       const order =
@@ -270,8 +213,8 @@ export async function POST(request: NextRequest) {
       return {
         orderId: order.id,
         deviceUdid: device.udid,
-        certificateId: certificateType.ppqcheckId,
-        theoreticalFunding,
+        ppqcheckCertificateId,
+        requiredTokens,
       };
     });
 
@@ -281,17 +224,17 @@ export async function POST(request: NextRequest) {
      * ─────────────────────────────────────────────
      */
 
-    const apiKey = process.env.PPQCHECK_API_KEY;
+    const apiKey =
+      process.env.PPQCHECK_API_KEY;
 
     if (!apiKey) {
       console.error(
         "PPQCheck: API key non configurata"
       );
 
-      await restoreReservation(
+      await failOrderAndRestoreTokens(
         reservation.orderId,
-        reservation.theoreticalFunding,
-        requiredTokens,
+        reservation.requiredTokens,
         session.user.id
       );
 
@@ -304,8 +247,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const ppqcheckResponse = await fetch(
-      PPQCHECK_API_URL,
+    /*
+     * POST /certificate
+     */
+
+    const createResponse = await fetch(
+      `${PPQCHECK_API_BASE}/certificate`,
       {
         method: "POST",
         headers: {
@@ -315,73 +262,57 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           udid: reservation.deviceUdid,
           certificateId:
-            reservation.certificateId,
+            reservation.ppqcheckCertificateId,
           deviceType: "iphone",
         }),
       }
     );
 
-    const responseText =
-      await ppqcheckResponse.text();
+    const createRaw =
+      await createResponse.text();
 
     /*
-     * ─────────────────────────────────────────────
-     * DIAGNOSTICA PPQCHECK
-     * ─────────────────────────────────────────────
+     * LOG RAW COMPLETO DELLA RISPOSTA PPQCHECK.
      *
-     * Non logghiamo:
-     * - API key
-     * - password
-     * - file .p12
-     * - mobileprovision
-     * - eventuale base64 del certificato
+     * Non contiene la API key perché viene loggata
+     * solamente la risposta HTTP.
      */
 
     console.log(
-      "PPQCheck create response:",
-      {
-        status: ppqcheckResponse.status,
-        ok: ppqcheckResponse.ok,
-        body: responseText,
-      }
+      "PPQCheck RAW CREATE RESPONSE:",
+      createRaw
     );
 
-    let ppqcheckData: PpqcheckCreateResponse = {};
+    let createData: PpqcheckCreateResponse = {};
 
     try {
-      ppqcheckData =
-        JSON.parse(responseText) as PpqcheckCreateResponse;
+      createData =
+        JSON.parse(createRaw) as PpqcheckCreateResponse;
     } catch {
       console.error(
-        "PPQCheck: risposta non JSON",
-        ppqcheckResponse.status
+        "PPQCheck: risposta CREATE non JSON"
       );
     }
 
     console.log(
-      "PPQCheck create order:",
+      "PPQCheck CREATE RESPONSE:",
       {
-        id: ppqcheckData.id,
-        status: ppqcheckData.status,
-        price: ppqcheckData.price,
-        currency: ppqcheckData.currency,
-        requestedCurrency:
-          ppqcheckData.requestedCurrency,
-        fellBack: ppqcheckData.fellBack,
+        statusCode: createResponse.status,
+        ok: createResponse.ok,
+        data: createData,
       }
     );
 
-    if (!ppqcheckResponse.ok) {
+    if (!createResponse.ok) {
       console.error(
         "PPQCheck create certificate failed:",
-        ppqcheckResponse.status,
-        responseText
+        createResponse.status,
+        createRaw
       );
 
-      await restoreReservation(
+      await failOrderAndRestoreTokens(
         reservation.orderId,
-        reservation.theoreticalFunding,
-        requiredTokens,
+        reservation.requiredTokens,
         session.user.id
       );
 
@@ -389,24 +320,25 @@ export async function POST(request: NextRequest) {
         {
           error:
             "Impossibile creare il certificato PPQCheck",
+          ppqcheckStatus:
+            createResponse.status,
         },
         { status: 502 }
       );
     }
 
     const ppqcheckOrderId =
-      ppqcheckData.id;
+      createData.id;
 
     if (!ppqcheckOrderId) {
       console.error(
         "PPQCheck: ID ordine mancante",
-        ppqcheckData
+        createData
       );
 
-      await restoreReservation(
+      await failOrderAndRestoreTokens(
         reservation.orderId,
-        reservation.theoreticalFunding,
-        requiredTokens,
+        reservation.requiredTokens,
         session.user.id
       );
 
@@ -419,6 +351,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    /*
+     * Salva il riferimento PPQCheck nel nostro ordine.
+     */
+
     await db.orm.public.CertificateOrder
       .where({
         id: reservation.orderId,
@@ -427,76 +363,177 @@ export async function POST(request: NextRequest) {
         ppqcheckOrderId,
       });
 
-    console.log(
-      "CertificateOrder linked to PPQCheck:",
-      {
-        orderId: reservation.orderId,
-        ppqcheckOrderId,
-        deviceId,
-        certificateTypeId,
-        tokens: requiredTokens,
-      }
-    );
-
-    const status =
-      getPpqcheckStatus(ppqcheckData.status);
-
     /*
      * ─────────────────────────────────────────────
-     * SUCCESS IMMEDIATO
+     * POLLING PPQCHECK
      * ─────────────────────────────────────────────
      */
 
-    if (
-      status === "success" ||
-      status === "successful" ||
-      status === "completed"
-    ) {
-      const actualCost =
-        Number(ppqcheckData.price);
+    for (const delay of POLL_DELAYS) {
+      if (delay > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, delay)
+        );
+      }
+
+      const certificateResponse =
+        await fetch(
+          `${PPQCHECK_API_BASE}/certificate?id=${encodeURIComponent(
+            ppqcheckOrderId
+          )}`,
+          {
+            method: "GET",
+            headers: {
+              "X-API-Key": apiKey,
+            },
+          }
+        );
+
+      const certificateRaw =
+        await certificateResponse.text();
+
+      /*
+       * LOG RAW DI OGNI RISPOSTA DEL POLLING.
+       */
+
+      console.log(
+        "PPQCheck RAW CERTIFICATE RESPONSE:",
+        certificateRaw
+      );
+
+      let certificateData:
+        PpqcheckCertificateResponse = {};
+
+      try {
+        certificateData =
+          JSON.parse(
+            certificateRaw
+          ) as PpqcheckCertificateResponse;
+      } catch {
+        console.error(
+          "PPQCheck: risposta GET certificate non JSON"
+        );
+      }
+
+      console.log(
+        "PPQCheck CERTIFICATE RESPONSE:",
+        {
+          statusCode:
+            certificateResponse.status,
+          ok: certificateResponse.ok,
+          data: certificateData,
+        }
+      );
+
+      if (!certificateResponse.ok) {
+        console.error(
+          "PPQCheck certificate GET failed:",
+          certificateResponse.status,
+          certificateRaw
+        );
+
+        continue;
+      }
+
+      const status =
+        getStatus(certificateData.status);
+
+      /*
+       * ─────────────────────────────────────────
+       * SUCCESS
+       * ─────────────────────────────────────────
+       */
 
       if (
-        !Number.isFinite(actualCost) ||
-        actualCost < 0
+        status === "success" ||
+        status === "successful" ||
+        status === "completed"
       ) {
-        console.error(
-          "PPQCheck: costo non valido",
-          ppqcheckData
-        );
+        const actualCost =
+          Number(certificateData.price);
+
+        if (
+          !Number.isFinite(actualCost) ||
+          actualCost < 0
+        ) {
+          console.error(
+            "PPQCheck: prezzo restituito non valido",
+            certificateData
+          );
+
+          return NextResponse.json({
+            success: true,
+            status: "PROCESSING",
+            orderId:
+              reservation.orderId,
+            ppqcheckOrderId,
+            ppqcheck: certificateData,
+          });
+        }
+
+        await completeSuccessfulOrder({
+          orderId: reservation.orderId,
+          actualCost,
+          userId: session.user.id,
+        });
 
         return NextResponse.json({
           success: true,
-          status: "PROCESSING",
-          orderId: reservation.orderId,
+          status: "SUCCESS",
+          orderId:
+            reservation.orderId,
           ppqcheckOrderId,
+          ppqcheck: certificateData,
         });
       }
 
-      await completeSuccessfulOrder({
-        orderId: reservation.orderId,
-        ppqcheckOrderId,
-        actualCost,
-        userId: session.user.id,
-      });
+      /*
+       * Se PPQCheck ha esplicitamente fallito,
+       * restituiamo i token.
+       */
 
-      return NextResponse.json({
-        success: true,
-        status: "SUCCESS",
-        orderId: reservation.orderId,
-        ppqcheckOrderId,
-      });
+      if (
+        status === "failed" ||
+        status === "failure" ||
+        status === "cancelled" ||
+        status === "canceled"
+      ) {
+        console.error(
+          "PPQCheck certificate failed:",
+          certificateData
+        );
+
+        await failOrderAndRestoreTokens(
+          reservation.orderId,
+          reservation.requiredTokens,
+          session.user.id
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              "PPQCheck non è riuscito a creare il certificato",
+            status: certificateData.status,
+            orderId:
+              reservation.orderId,
+            ppqcheckOrderId,
+            ppqcheck: certificateData,
+          },
+          { status: 502 }
+        );
+      }
     }
 
     /*
-     * ─────────────────────────────────────────────
-     * ORDINE ASINCRONO
-     * ─────────────────────────────────────────────
+     * Non è ancora terminato.
+     *
+     * NON restituiamo i token perché l'ordine
+     * PPQCheck potrebbe essere ancora in lavorazione.
      */
 
     return NextResponse.json({
       success: true,
-      status:
-        status || "PROCESSING",
+      status: "PROCESSING",
       orderId: reservation.orderId,
       ppqcheckOrderId,
     });
@@ -508,7 +545,8 @@ export async function POST(request: NextRequest) {
 
     if (
       error instanceof Error &&
-      error.message === "INSUFFICIENT_TOKENS"
+      error.message ===
+        "INSUFFICIENT_TOKENS"
     ) {
       return NextResponse.json(
         {
@@ -522,37 +560,13 @@ export async function POST(request: NextRequest) {
     if (
       error instanceof Error &&
       error.message ===
-        "INSUFFICIENT_PPQ_COVERAGE"
+        "USER_NOT_FOUND"
     ) {
       return NextResponse.json(
         {
           error:
-            "Credito PPQCheck insufficiente",
+            "Utente non trovato",
         },
-        { status: 409 }
-      );
-    }
-
-    if (
-      error instanceof Error &&
-      error.message ===
-        "SYNC_CREDIT_NOT_INITIALIZED"
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Sistema di credito PPQCheck non inizializzato",
-        },
-        { status: 500 }
-      );
-    }
-
-    if (
-      error instanceof Error &&
-      error.message === "USER_NOT_FOUND"
-    ) {
-      return NextResponse.json(
-        { error: "Utente non trovato" },
         { status: 404 }
       );
     }
@@ -571,30 +585,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (
-      error instanceof Error &&
-      error.message ===
-        "COVERAGE_RESERVATION_FAILED"
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Impossibile riservare il credito PPQCheck",
-        },
-        { status: 409 }
-      );
-    }
-
     return NextResponse.json(
-      { error: "Errore interno" },
+      {
+        error: "Errore interno",
+      },
       { status: 500 }
     );
   }
 }
 
-async function restoreReservation(
+async function failOrderAndRestoreTokens(
   orderId: number,
-  theoreticalFunding: number,
   tokens: number,
   userId: number
 ) {
@@ -617,10 +618,6 @@ async function restoreReservation(
     ) {
       return;
     }
-
-    /*
-     * Restituisci token.
-     */
 
     const user =
       await tx.orm.public.User
@@ -647,44 +644,6 @@ async function restoreReservation(
 
     await tx.execute(tokenUpdate);
 
-    /*
-     * Restituisci copertura teorica.
-     */
-
-    const syncCredit =
-      await tx.orm.public.SyncCredit
-        .where({
-          id: 1,
-        })
-        .first();
-
-    if (syncCredit) {
-      const theoreticalFundingParam = param(
-        theoreticalFunding.toFixed(2),
-        {
-          codecId: "pg/numeric@1",
-        }
-      );
-
-      const coverageUpdate =
-        tx.sql.public.syncCredit
-          .update((f, fns) => ({
-            ppqCoverage:
-              fns.raw`${f.ppqCoverage} + ${theoreticalFundingParam}`
-                .returns("pg/numeric@1"),
-          }))
-          .where((f, fns) =>
-            fns.eq(f.id, syncCredit.id)
-          )
-          .build();
-
-      await tx.execute(coverageUpdate);
-    }
-
-    /*
-     * Ordine fallito.
-     */
-
     await tx.orm.public.CertificateOrder
       .where({
         id: orderId,
@@ -697,12 +656,10 @@ async function restoreReservation(
 
 async function completeSuccessfulOrder({
   orderId,
-  ppqcheckOrderId,
   actualCost,
   userId,
 }: {
   orderId: number;
-  ppqcheckOrderId: string;
   actualCost: number;
   userId: number;
 }) {
@@ -724,55 +681,10 @@ async function completeSuccessfulOrder({
       return;
     }
 
-    const syncCredit =
-      await tx.orm.public.SyncCredit
-        .where({
-          id: 1,
-        })
-        .first();
-
-    if (!syncCredit) {
-      throw new Error(
-        "SYNC_CREDIT_NOT_INITIALIZED"
-      );
-    }
-
-    /*
-     * La copertura teorica era stata riservata.
-     *
-     * Ora restituiamo il costo reale.
-     *
-     * Esempio 1 token:
-     *
-     * -1.40 +1.20 = -0.20
-     *
-     * Quindi il sistema libera esattamente
-     * $0.20 di copertura.
-     */
-
-    const actualCostParam = param(
-      actualCost.toFixed(2),
-      {
-        codecId: "pg/numeric@1",
-      }
-    );
-
-    const coverageUpdate =
-      tx.sql.public.syncCredit
-        .update((f, fns) => ({
-          ppqCoverage:
-            fns.raw`${f.ppqCoverage} + ${actualCostParam}`
-              .returns("pg/numeric@1"),
-        }))
-        .where((f, fns) =>
-          fns.eq(f.id, syncCredit.id)
-        )
-        .build();
-
-    await tx.execute(coverageUpdate);
-
     /*
      * Registra il costo reale PPQCheck.
+     *
+     * NON modifica SyncCredit.
      */
 
     await tx.orm.public.PpqcheckTransaction.create({
@@ -780,14 +692,14 @@ async function completeSuccessfulOrder({
       amount: actualCost.toFixed(2),
       certificateOrderId: order.id,
       description:
-        `PPQCheck certificate order ${ppqcheckOrderId}`,
+        `PPQCheck certificate order ${order.ppqcheckOrderId}`,
     });
 
     /*
      * Registra il consumo dei token.
      *
-     * Il saldo era già stato riservato all'inizio
-     * dell'operazione.
+     * I token erano già stati riservati
+     * all'inizio dell'operazione.
      */
 
     await tx.orm.public.TokenTransaction.create({
