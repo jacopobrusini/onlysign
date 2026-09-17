@@ -70,7 +70,6 @@ return ( <div className="flex flex-col items-stretch gap-2 sm:items-end"> <butto
    >
 {loading ? "Acquisto in corso..." : "Acquista certificato"} </button>
 
-```
   {error && (
     <p className="max-w-xs text-right text-sm text-red-300">
       {error}
