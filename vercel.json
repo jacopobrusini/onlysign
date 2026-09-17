@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/certificates",
-      "schedule": "* * * * *"
+      "schedule": "0 3 * * *"
     }
   ]
 }
