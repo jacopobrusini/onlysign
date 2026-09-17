@@ -1,5 +1,9 @@
 {
   "crons": [
+        {
+      "path": "/api/cron/certificates",
+      "schedule": "0 4 * * *"
+    },
     {
       "path": "/api/cron/ppqcheck",
       "schedule": "0 2 * * *"
@@ -7,10 +11,7 @@
     {
       "path": "/api/cron/sync-credit",
       "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/certificates",
-      "schedule": "0 3 * * *"
     }
+
   ]
 }
