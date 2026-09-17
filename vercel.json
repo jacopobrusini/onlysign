@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/ppqcheck",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/sync-credit",
+      "schedule": "0 0 * * *"
     }
   ]
 }
