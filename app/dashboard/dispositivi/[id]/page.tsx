@@ -71,15 +71,28 @@ if (!device) {
 return null;
 }
 
-const [deviceName, iosVersion, certificateTypes] =
+const [deviceName, iosVersion, certificateTypes, certificateOrders] =
 await Promise.all([
 getDeviceModel(device.product),
-getIOSVersion(device.product, device.build),
-db.orm.public.CertificateType
-.where({
-active: true,
-})
-.all(),
+
+  getIOSVersion(
+    device.product,
+    device.build
+  ),
+
+  db.orm.public.CertificateType
+    .where({
+      active: true,
+    })
+    .all(),
+
+  db.orm.public.CertificateOrder
+    .where({
+      deviceId: device.id,
+      userId: session.user.id,
+      status: "SUCCESS",
+    })
+    .all(),
 ]);
 
 const certificates = [...certificateTypes].sort(
@@ -89,11 +102,15 @@ const certificates = [...certificateTypes].sort(
 return (
 <main
 className="min-h-screen bg-cover bg-center bg-fixed text-white"
-style={{ backgroundImage: "url('/background.png')" }}
+style={{
+backgroundImage: "url('/background.png')",
+}}
 > <Header />
 
+```
   <section className="px-6 pb-16 pt-28">
     <div className="mx-auto max-w-4xl">
+
       {/* Titolo */}
       <div className="mb-10">
         <p className="mb-2 text-sm uppercase tracking-[0.3em] text-white/60">
@@ -116,6 +133,7 @@ style={{ backgroundImage: "url('/background.png')" }}
         </h2>
 
         <div className="mt-6 grid gap-5 sm:grid-cols-2">
+
           {/* Modello */}
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-white/40">
@@ -157,7 +175,7 @@ style={{ backgroundImage: "url('/background.png')" }}
       <div className="mt-8">
         <div className="mb-5">
           <h2 className="text-2xl font-semibold">
-            Acquista certificato
+            Certificati
           </h2>
 
           <p className="mt-2 text-sm text-white/60">
@@ -173,54 +191,75 @@ style={{ backgroundImage: "url('/background.png')" }}
           </div>
         ) : (
           <div className="space-y-4">
-            {certificates.map((certificate) => (
-              <div
-                key={certificate.id}
-                className="rounded-2xl border border-white/10 bg-black/20 p-6 shadow-xl backdrop-blur-xl transition hover:border-white/20 hover:bg-black/25"
-              >
-                <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <h3 className="text-lg font-semibold">
-                      {certificate.name}
-                    </h3>
+            {certificates.map((certificate) => {
+              const successfulOrder = [...certificateOrders]
+                .reverse()
+                .find(
+                  (order) =>
+                    order.certificateTypeId === certificate.id
+                );
 
-                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/60">
-                      <span>
-                        Validità:{" "}
-                        <span className="text-white/80">
-                          {formatValidity(certificate.validityDays)}
-                        </span>
-                      </span>
+              return (
+                <div
+                  key={certificate.id}
+                  className="rounded-2xl border border-white/10 bg-black/20 p-6 shadow-xl backdrop-blur-xl transition hover:border-white/20 hover:bg-black/25"
+                >
+                  <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
 
-                      {certificate.antiRevokeDays !== null && (
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold">
+                        {certificate.name}
+                      </h3>
+
+                      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/60">
                         <span>
-                          Anti-Revoke:{" "}
+                          Validità:{" "}
                           <span className="text-white/80">
-                            {formatAntiRevoke(
-                              certificate.antiRevokeDays
+                            {formatValidity(
+                              certificate.validityDays
                             )}
                           </span>
                         </span>
+
+                        {certificate.antiRevokeDays !== null && (
+                          <span>
+                            Anti-Revoke:{" "}
+                            <span className="text-white/80">
+                              {formatAntiRevoke(
+                                certificate.antiRevokeDays
+                              )}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 flex-col gap-3 sm:items-end">
+
+                      <div className="text-sm text-white/50">
+                        {certificate.tokens}{" "}
+                        token
+                      </div>
+
+                      {successfulOrder ? (
+                        <Link
+                          href={`/api/certificates/${successfulOrder.id}/download`}
+                          className="rounded-xl bg-white px-5 py-3 text-center text-sm font-medium text-black transition hover:bg-white/90"
+                        >
+                          Scarica certificato
+                        </Link>
+                      ) : (
+                        <PurchaseCertificateButton
+                          deviceId={device.id}
+                          certificateTypeId={certificate.id}
+                        />
                       )}
+
                     </div>
                   </div>
-
-                  <div className="flex shrink-0 flex-col gap-3 sm:items-end">
-  <div className="text-sm text-white/50">
-    {certificate.tokens}{" "}
-    {certificate.tokens === 1
-      ? "token"
-      : "token"}
-  </div>
-
-  <PurchaseCertificateButton
-    deviceId={device.id}
-    certificateTypeId={certificate.id}
-  />
-</div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -236,8 +275,10 @@ style={{ backgroundImage: "url('/background.png')" }}
           ← Torna ai dispositivi
         </Link>
       </div>
+
     </div>
   </section>
 </main>
+
 );
 }
