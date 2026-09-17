@@ -122,6 +122,7 @@ async function getPpqcheckBalance() {
   const balance =
     Number(
       nestedData.availableBalance ??
+      nestedData.balance ??
       0
     );
 
