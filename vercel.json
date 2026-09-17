@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/sync-credit",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/certificates",
+      "schedule": "* * * * *"
     }
   ]
 }
