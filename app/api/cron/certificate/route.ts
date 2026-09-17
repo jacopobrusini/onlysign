@@ -132,7 +132,6 @@ await tx.orm.public.PpqcheckTransaction.create({
   description:
     `PPQCheck certificate ${certificate.code ?? order.ppqcheckOrderId}`,
 });
-//
     await tx.orm.public.TokenTransaction.create({
       userId: order.userId,
       amount: -order.tokens,
